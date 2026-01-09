@@ -1412,6 +1412,21 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
     // Main App
     // ----------------------------------------------------------
     function PingPongManager() {
+      const DATA_STORAGE_KEY = 'pingpong_data_autosave_v1';
+      // 저장된 데이터가 있으면 불러오고, 없으면 기본값(fallback)을 사용하는 헬퍼 함수
+	const getSavedState = (key, fallback) => {
+	  try {
+	    const saved = localStorage.getItem(DATA_STORAGE_KEY);
+	    if (!saved) return fallback;
+	    const parsed = JSON.parse(saved);
+	    // 저장된 객체 안에 해당 key가 있으면 반환, 없으면 기본값 반환
+	    return parsed[key] !== undefined ? parsed[key] : fallback;
+	  } catch (e) {
+	    console.error("Data load failed", e);
+	    return fallback;
+	  }
+	};
+	
       const [activeTab, setActiveTab] = useState('register');
       const [isDarkMode, setIsDarkMode] = useState(true);
       const [themeMenuOpen, setThemeMenuOpen] = useState(false);
@@ -1438,11 +1453,21 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
         el.textContent = cssFor(':root', themeOverrides.dark) + cssFor('body.light-mode', themeOverrides.light);
       }, [themeOverrides]);
 
-      const [teams, setTeams] = useState([]);
-      const [groups, setGroups] = useState([]);
-      const [tournamentData, setTournamentData] = useState({ type: 'single', brackets: [] });
-      const [isLeagueGenerated, setIsLeagueGenerated] = useState(false);
-      const [cardSizes, setCardSizes] = useState({});
+      //const [teams, setTeams] = useState([]);
+      const [teams, setTeams] = useState(() => getSavedState('teams', []));
+      
+      //const [groups, setGroups] = useState([]);
+      const [groups, setGroups] = useState(() => getSavedState('groups', []));
+      
+      //const [tournamentData, setTournamentData] = useState({ type: 'single', brackets: [] });
+      const [tournamentData, setTournamentData] = useState(() => getSavedState('tournamentData', { type: 'single', brackets: [] }));
+      
+      //const [isLeagueGenerated, setIsLeagueGenerated] = useState(false);
+      const [isLeagueGenerated, setIsLeagueGenerated] = useState(() => getSavedState('isLeagueGenerated', false));
+      
+      //const [cardSizes, setCardSizes] = useState({});
+      const [cardSizes, setCardSizes] = useState(() => getSavedState('cardSizes', {}));
+      
       const [zoom, setZoom] = useState(0.85);
       const [pan, setPan] = useState({ x: 0, y: 0 });
       const [isDragging, setIsDragging] = useState(false);
@@ -1456,11 +1481,17 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
       const [printGroupId, setPrintGroupId] = useState(null);
       const [swapModalData, setSwapModalData] = useState(null);
 
+      /*
       const [config, setConfig] = useState({
         teamSize: 1, minSumLevel: '', groupCount: 4,
         tournamentMode: 'all', topN: 2, rankMethod: '1',
       });
-
+      */
+      const [config, setConfig] = useState(() => getSavedState('config', {
+        teamSize: 1, minSumLevel: '', groupCount: 4,
+        tournamentMode: 'all', topN: 2, rankMethod: '1',
+      }));
+      
       const [newTeamName, setNewTeamName] = useState('');
       const [newMembers, setNewMembers] = useState([{ name: '', level: '' }]);
 
@@ -1487,6 +1518,25 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
       // Theme manager helpers
       useEffect(() => { setThemeManagerTab(isDarkMode ? 'dark' : 'light'); }, [themeManagerOpen]);
       useEffect(() => { if (themeManagerOpen) setIsDarkMode(themeManagerTab === 'dark'); }, [themeManagerOpen, themeManagerTab]);
+
+	useEffect(() => {
+	  // 저장할 데이터 객체 생성
+	  const dataToSave = {
+	    teams,
+	    groups,
+	    tournamentData,
+	    isLeagueGenerated,
+	    cardSizes,
+	    config
+	  };
+	  
+	  // 로컬 스토리지에 JSON 문자열로 변환하여 저장
+	  localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify(dataToSave));
+	  
+	  // 디버깅용 로그 (개발 완료 후 삭제 가능)
+	  // console.log('Data auto-saved to local storage');
+	  
+	}, [teams, groups, tournamentData, isLeagueGenerated, cardSizes, config]);
 
       const updateThemeValue = (varKey, nextValue) => {
         setThemeOverrides(prev => {
