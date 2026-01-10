@@ -1137,6 +1137,583 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
       );
     }
 
+// ==========================================================
+  // [NEW] Tournament Setup Modal (Tighter Layout + Bigger Boxes + Solid Popover)
+  // ==========================================================
+  const TournamentSetupModal = ({ isOpen, onClose, config, groups, onConfirm }) => {
+    // 윈도우(모달) 상태
+    const [win, setWin] = useState({ x: 50, y: 50, w: 1200, h: 800 });
+    
+    // 캔버스 뷰(Zoom/Pan) 상태
+    const [view, setView] = useState({ zoom: 1, x: 0, y: 0 });
+    const [isPanning, setIsPanning] = useState(false);
+    
+    // Refs for Dragging
+    const winDragRef = useRef({ mode: null, startX: 0, startY: 0, init: {} });
+    const panDragRef = useRef({ startX: 0, startY: 0, initX: 0, initY: 0 });
+    const popoverDragRef = useRef({ startX: 0, startY: 0, initX: 0, initY: 0 });
+
+    // 데이터 상태
+    const [activeTab, setActiveTab] = useState('upper');
+    const [slots, setSlots] = useState({ upper: [], lower: [] });
+    const [bracketSize, setBracketSize] = useState({ upper: 4, lower: 4 });
+    const [qualifiers, setQualifiers] = useState({ upper: [], lower: [] });
+    
+    // Popover State (slotIdx, x, y)
+    const [popover, setPopover] = useState(null); 
+
+    // --- 초기화 로직 ---
+    useEffect(() => {
+      if (!isOpen) return;
+      
+      const upperQ = [], lowerQ = [];
+      const maxRank = Math.max(...groups.map(g => g.teams.length));
+
+      const getTeamByRank = (gId, rank) => {
+        const sorted = [...groups[gId].teams].sort((a,b)=>(a.leagueStats.rank||99)-(b.leagueStats.rank||99));
+        return sorted[rank-1];
+      };
+
+      for (let r = 1; r <= maxRank; r++) {
+        groups.forEach(g => {
+          const team = getTeamByRank(g.id, r);
+          if (team) {
+            const item = { 
+              id: `${g.id}-${r}`, 
+              label: `${g.name} ${r}위`, 
+              team: { ...team, sourceLabel: `${g.name} ${r}위` } 
+            };
+            if (config.tournamentMode === 'split') {
+              if (r <= config.topN) upperQ.push(item); else lowerQ.push(item);
+            } else if (config.tournamentMode === 'topN') {
+              if (r <= config.topN) upperQ.push(item);
+            } else {
+              upperQ.push(item);
+            }
+          }
+        });
+      }
+
+      setQualifiers({ upper: upperQ, lower: lowerQ });
+
+      const calcSize = (n) => {
+        if (n <= 4) return 4;
+        if (n <= 8) return 8;
+        if (n <= 16) return 16;
+        if (n <= 32) return 32;
+        if (n <= 64) return 64;
+        if (n <= 128) return 128;
+        return 256;
+      };
+
+      const uSize = calcSize(upperQ.length);
+      const lSize = calcSize(lowerQ.length);
+      
+      setBracketSize({ upper: uSize, lower: lSize });
+      setSlots(prev => {
+         if(prev.upper.length !== uSize || prev.lower.length !== lSize) {
+             return { upper: Array(uSize).fill(null), lower: Array(lSize).fill(null) };
+         }
+         return prev;
+      });
+      setActiveTab('upper');
+      
+      const initialSize = activeTab === 'upper' ? uSize : lSize;
+      let startZoom = 0.9;
+      if (initialSize >= 32) startZoom = 0.6;
+      if (initialSize >= 64) startZoom = 0.4;
+      if (initialSize >= 128) startZoom = 0.3;
+      
+      setView({ zoom: startZoom, x: 0, y: 0 });
+
+    }, [isOpen, config, groups]);
+    
+    useEffect(() => {
+      setPopover(null);
+    }, [activeTab]);
+    
+    // --- 통합 드래그 핸들러 ---
+    useEffect(() => {
+      const onMove = (e) => {
+        if (winDragRef.current.mode) {
+            const { startX, startY, init } = winDragRef.current;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            if (winDragRef.current.mode === 'move') {
+              setWin(p => ({ ...p, x: init.x + dx, y: init.y + dy }));
+            } else {
+              setWin(p => ({ ...p, w: Math.max(800, init.w + dx), h: Math.max(600, init.h + dy) }));
+            }
+            return;
+        }
+        if (isPanning) {
+            e.preventDefault();
+            const dx = e.clientX - panDragRef.current.startX;
+            const dy = e.clientY - panDragRef.current.startY;
+            setView(p => ({ ...p, x: panDragRef.current.initX + dx, y: panDragRef.current.initY + dy }));
+            return;
+        }
+        if (popoverDragRef.current.active) {
+            e.preventDefault();
+            const dx = e.clientX - popoverDragRef.current.startX;
+            const dy = e.clientY - popoverDragRef.current.startY;
+            setPopover(p => p ? ({ ...p, x: popoverDragRef.current.initX + dx, y: popoverDragRef.current.initY + dy }) : null);
+        }
+      };
+
+      const onUp = () => { 
+          winDragRef.current.mode = null; 
+          setIsPanning(false);
+          popoverDragRef.current.active = false;
+          document.body.style.userSelect = ''; 
+          document.body.style.cursor = '';
+      };
+
+      if(isOpen) { window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp); }
+      return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+    }, [isOpen, isPanning]);
+
+    const startWinDrag = (mode, e) => {
+      e.stopPropagation();
+      winDragRef.current = { mode, startX: e.clientX, startY: e.clientY, init: { ...win } };
+      document.body.style.userSelect = 'none';
+    };
+
+    const startPan = (e) => {
+        if (e.target.closest('button') || e.target.closest('.match-card') || e.target.closest('.popover-container')) return;
+        setIsPanning(true);
+        panDragRef.current = { startX: e.clientX, startY: e.clientY, initX: view.x, initY: view.y };
+        document.body.style.cursor = 'grabbing';
+        document.body.style.userSelect = 'none';
+    };
+
+    const startPopoverDrag = (e) => {
+        e.stopPropagation();
+        if(!popover) return;
+        popoverDragRef.current = { active: true, startX: e.clientX, startY: e.clientY, initX: popover.x, initY: popover.y };
+        document.body.style.userSelect = 'none';
+    };
+
+    // --- 슬롯 조작 ---
+    const handleSlotClick = (idx, e) => {
+      e.stopPropagation();
+      const initialX = win.x + win.w / 2 - 150; 
+      const initialY = win.y + win.h / 2 - 200;
+      setPopover({ slotIdx: idx, x: initialX, y: initialY });
+    };
+
+    const assignTeam = (slotIdx, qItem) => {
+      const newSlots = [...slots[activeTab]];
+      const existingIdx = newSlots.findIndex(s => s && s.id === qItem.id);
+
+      if (existingIdx !== -1 && existingIdx !== slotIdx) {
+          const targetOccupant = newSlots[slotIdx];
+          newSlots[existingIdx] = targetOccupant;
+          newSlots[slotIdx] = qItem;
+      } else {
+          newSlots[slotIdx] = qItem;
+      }
+
+      setSlots(p => ({ ...p, [activeTab]: newSlots }));
+      setPopover(null);
+    };
+
+    const resetCurrent = () => {
+      if(!confirm('현재 탭의 대진 설정을 초기화하시겠습니까?')) return;
+      setSlots(p => ({ ...p, [activeTab]: Array(bracketSize[activeTab]).fill(null) }));
+    };
+
+    const handleAutoAssign = () => {
+      if (!confirm('현재 탭의 팀들을 시드 순서대로 자동 배치하시겠습니까?')) return;
+
+      const size = bracketSize[activeTab];
+      const qList = [...qualifiers[activeTab]];
+      
+      let seedOrder = [1];
+      while (seedOrder.length < size) {
+          const next = [];
+          const len = seedOrder.length * 2 + 1;
+          seedOrder.forEach(s => { next.push(s); next.push(len - s); });
+          seedOrder = next;
+      }
+
+      const newSlots = new Array(size).fill(null);
+      qList.forEach((teamObj, i) => {
+          if (i >= size) return; 
+          const slotIndex = seedOrder.indexOf(i + 1);
+          if (slotIndex !== -1) newSlots[slotIndex] = teamObj;
+      });
+
+      for(let i=0; i<size; i++) {
+          if(!newSlots[i]) newSlots[i] = { id: `auto-bye-${i}`, label: 'BYE', isBye: true, team: { id: `bye-${Math.random()}`, name: 'BYE', isBye: true } };
+      }
+
+      setSlots(prev => ({ ...prev, [activeTab]: newSlots }));
+    };
+
+    const handleConfirm = () => {
+      const hasSplit = config.tournamentMode === 'split';
+      const checkEmpty = (arr, name) => {
+          if (arr.some(s => s === null)) {
+              alert(`[${name}] 배정되지 않은 대진칸이 있습니다.\n빈 칸을 클릭하여 팀을 선택하거나 'BYE'를 지정해주세요.`);
+              return false;
+          }
+          return true;
+      };
+
+      if (qualifiers.upper.length > 0 && !checkEmpty(slots.upper, hasSplit ? '상위부' : '통합')) return;
+      if (hasSplit && qualifiers.lower.length > 0 && !checkEmpty(slots.lower, '하위부')) return;
+
+      const result = {};
+      if (qualifiers.upper.length > 0) result.upper = slots.upper.map(s => s.team);
+      if (qualifiers.lower.length > 0) result.lower = slots.lower.map(s => s.team);
+      
+      onConfirm(result);
+    };
+
+    // --- 렌더링 헬퍼 ---
+    const SetupMatchNode = ({ roundIdx, matchIdx, isRight, totalRounds, slotIdxA, slotIdxB, currentSlots }) => {
+        const isLeaf = roundIdx === 0;
+        const isLastRound = roundIdx === totalRounds - 2; 
+        const isEven = matchIdx % 2 === 0;
+        
+        const slotA = isLeaf ? currentSlots[slotIdxA] : null;
+        const slotB = isLeaf ? currentSlots[slotIdxB] : null;
+
+        // [UPDATE] 사이즈 확대 (높이, 너비) 및 간격 조정
+        // minWidth를 180px로 키움
+        const wrapperStyle = {
+            minHeight: isLeaf ? '72px' : '0', // 버튼 높이 증가에 맞춰 최소 높이 증가
+            display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', flex: 1, width: '100%'
+        };
+
+        const lineStyle = {
+            position: 'absolute',
+            backgroundColor: 'var(--tournament-line)',
+            opacity: 0.7
+        };
+
+        // [UPDATE] 선 길이 축소 (20px -> 12px)
+        const LINE_LEN = '12px';
+
+        return (
+            <div style={wrapperStyle}>
+                {/* 세로선 (부모 연결) */}
+                {!isLastRound && (
+                    <div style={{
+                        ...lineStyle,
+                        width: '2px',
+                        top: isEven ? '50%' : '0', 
+                        height: '50%',
+                        // 가로선이 없으므로 세로선 위치를 박스에 아주 가깝게 조정
+                        [isRight?'left':'right']: '-6px' 
+                    }} />
+                )}
+                
+                {/* 마지막 라운드 연결선 */}
+                {isLastRound && (
+                    <div style={{
+                        ...lineStyle,
+                        height: '2px',
+                        width: LINE_LEN,
+                        top: '50%',
+                        marginTop: '-1px',
+                        [isRight?'right':'left']: '-6px'
+                    }} />
+                )}
+
+                {/* [UPDATE] 박스 사이즈 확대 & 마진 축소 (좌우 간격 좁힘) */}
+                <div className={`match-card relative z-10 p-1 flex flex-col justify-center gap-1.5`}
+                     style={{
+                         minWidth: '180px', maxWidth: '240px', margin: '4px 6px', // Width 늘리고 Margin 줄임
+                         background: 'transparent', border: 'none', boxShadow: 'none'
+                     }}>
+                    
+                    {isLeaf ? (
+                        <>
+                            {/* [UPDATE] 버튼 높이/폰트 확대 */}
+                            <button onClick={(e)=>handleSlotClick(slotIdxA, e)}
+                                className="w-full text-left px-3 py-2 rounded-md text-sm font-bold truncate border transition-all leading-tight relative z-20"
+                                style={{
+                                    backgroundColor: slotA ? (slotA.isBye ? 'var(--input-bg)' : 'var(--btn-secondary-bg)') : 'var(--input-bg)',
+                                    borderColor: slotA ? 'var(--accent)' : 'var(--table-border)',
+                                    color: slotA ? (slotA.isBye ? 'var(--text-muted)' : 'var(--text-main)') : 'var(--text-muted)',
+                                    borderStyle: slotA ? 'solid' : 'dashed',
+                                    height: '38px', // 높이 증가
+                                    fontSize: '13px'
+                                }}
+                                title={slotA ? slotA.label : '미배정'}>
+                                {slotA ? slotA.label : (slotIdxA+1)}
+                            </button>
+                            
+                            <button onClick={(e)=>handleSlotClick(slotIdxB, e)}
+                                className="w-full text-left px-3 py-2 rounded-md text-sm font-bold truncate border transition-all leading-tight relative z-20"
+                                style={{
+                                    backgroundColor: slotB ? (slotB.isBye ? 'var(--input-bg)' : 'var(--btn-secondary-bg)') : 'var(--input-bg)',
+                                    borderColor: slotB ? 'var(--accent)' : 'var(--table-border)',
+                                    color: slotB ? (slotB.isBye ? 'var(--text-muted)' : 'var(--text-main)') : 'var(--text-muted)',
+                                    borderStyle: slotB ? 'solid' : 'dashed',
+                                    height: '38px', // 높이 증가
+                                    fontSize: '13px'
+                                }}
+                                title={slotB ? slotB.label : '미배정'}>
+                                {slotB ? slotB.label : (slotIdxB+1)}
+                            </button>
+                            
+                            {/* 미세 연결선 */}
+                            <div style={{
+                                position: 'absolute',
+                                [isRight?'left':'right']: '-6px', 
+                                top: '50%',
+                                transform: 'translateY(-50%)',
+                                width: '2px',
+                                height: 'calc(100% - 38px)', 
+                                backgroundColor: 'var(--tournament-line)',
+                                opacity: 0.5
+                            }} />
+                        </>
+                    ) : (
+                        // Inner node placeholder
+                        <div className="w-full h-8 rounded border" style={{borderColor: 'var(--table-border)', opacity: 0.15}}></div>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    const renderWing = (isRight) => {
+        const size = bracketSize[activeTab];
+        const halfSize = size / 2;
+        const totalRounds = Math.log2(size); 
+        const wingRounds = Array.from({length: totalRounds - 1}, (_, i) => i);
+        const startSlot = isRight ? halfSize : 0;
+        
+        return (
+            <div className={`wing-container ${isRight ? 'right-wing' : 'left-wing'}`} style={{gap:0}}>
+                {wingRounds.map((rIdx) => {
+                    const matchesInRound = halfSize / Math.pow(2, rIdx + 1);
+                    return (
+                        <div key={rIdx} className="round-column justify-around" style={{minWidth:'200px'}}> 
+                            {Array.from({length: matchesInRound}, (_, mIdx) => {
+                                const actualLeafBase = startSlot + (mIdx * 2);
+                                return (
+                                    <SetupMatchNode 
+                                        key={mIdx} 
+                                        roundIdx={rIdx} 
+                                        matchIdx={mIdx}
+                                        isRight={isRight}
+                                        totalRounds={totalRounds}
+                                        slotIdxA={actualLeafBase}
+                                        slotIdxB={actualLeafBase + 1}
+                                        currentSlots={slots[activeTab]}
+                                    />
+                                );
+                            })}
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
+
+    if (!isOpen) return null;
+
+    const currentSlots = slots[activeTab];
+    const currentQualifiers = qualifiers[activeTab];
+    const usedIds = currentSlots.filter(Boolean).map(s => s.id);
+    const hasSplit = config.tournamentMode === 'split';
+
+    return (
+      <div className="fixed inset-0 z-[9999]">
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+        <div className="absolute flex flex-col rounded-xl border shadow-2xl overflow-hidden"
+          style={{ 
+              left: win.x, top: win.y, width: win.w, height: win.h, 
+              borderColor: 'var(--card-border)', 
+              background: 'var(--bg-body)',
+              color: 'var(--text-main)'
+          }}>
+          
+          {/* Header */}
+          <div className="flex justify-between items-center px-4 py-2 border-b cursor-move"
+            onMouseDown={(e)=>startWinDrag('move',e)} 
+            style={{borderColor:'var(--table-border)', background:'var(--table-header-bg)'}}>
+            <h3 className="font-bold flex items-center gap-2 text-base">
+              <Icons.Trophy size={18} style={{color:'var(--tournament-winner)'}}/> 토너먼트 대진 설정
+            </h3>
+            <button onClick={onClose} className="p-1 rounded opacity-70 hover:opacity-100"><Icons.X size={18}/></button>
+          </div>
+
+          {/* Toolbar */}
+          <div className="px-4 py-2 border-b flex justify-between items-center" 
+               style={{borderColor:'var(--table-border)', background: 'var(--card-bg)'}}>
+             <div className="flex gap-2 items-center">
+               {hasSplit ? (
+                 <div className="flex rounded-lg p-0.5 border" style={{borderColor:'var(--table-border)', background:'var(--input-bg)'}}>
+                   <button onClick={()=>setActiveTab('upper')} 
+                           className={`px-3 py-1 rounded text-xs font-bold transition-all`}
+                           style={{
+                               background: activeTab==='upper' ? 'var(--accent)' : 'transparent',
+                               color: activeTab==='upper' ? '#fff' : 'var(--text-muted)'
+                           }}>
+                           상위부 ({qualifiers.upper.length})
+                   </button>
+                   <button onClick={()=>setActiveTab('lower')} 
+                           className={`px-3 py-1 rounded text-xs font-bold transition-all`}
+                           style={{
+                               background: activeTab==='lower' ? 'var(--accent-2)' : 'transparent',
+                               color: activeTab==='lower' ? '#fff' : 'var(--text-muted)'
+                           }}>
+                           하위부 ({qualifiers.lower.length})
+                   </button>
+                 </div>
+               ) : (
+                 <span className="text-xs font-bold px-3 py-1 rounded border" 
+                       style={{color:'var(--accent)', borderColor:'var(--accent)', background:'var(--highlight-bg)'}}>
+                       통합 토너먼트
+                 </span>
+               )}
+               
+               <div className="w-px h-4 mx-1" style={{background:'var(--divider)'}}></div>
+
+               <button onClick={handleAutoAssign} 
+                       className="text-xs flex items-center gap-1 border px-2 py-1 rounded hover:opacity-80"
+                       style={{borderColor:'var(--accent)', color:'var(--accent)', background:'var(--input-bg)'}}>
+                 <Icons.Wand size={10}/> 자동 배정
+               </button>
+
+               <button onClick={resetCurrent} 
+                       className="text-xs flex items-center gap-1 border px-2 py-1 rounded hover:opacity-80"
+                       style={{borderColor:'var(--table-border)', color:'var(--text-muted)', background:'var(--input-bg)'}}>
+                 <Icons.Refresh size={10}/> 초기화
+               </button>
+             </div>
+             
+             <button onClick={handleConfirm} 
+               className="px-4 py-1.5 rounded-lg font-bold shadow-lg flex items-center gap-1.5 text-white text-xs transition-all transform active:scale-95"
+               style={{background: 'var(--btn-primary-bg)'}}>
+               <Icons.Check size={14}/> 대진표 확정
+             </button>
+          </div>
+
+          {/* Canvas Area (No Wheel) */}
+          <div className="flex-1 overflow-hidden relative cursor-grab active:cursor-grabbing"
+               style={{background: 'var(--bg-body)'}}
+               onMouseDown={startPan}>
+             
+             {/* Background Grid */}
+             <div className="absolute inset-0 pointer-events-none opacity-10" 
+                  style={{backgroundImage: 'radial-gradient(var(--table-border) 1px, transparent 1px)', backgroundSize: '20px 20px', transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})`, transformOrigin: '0 0'}}>
+             </div>
+
+             <div className="w-full h-full flex items-center justify-center origin-center will-change-transform"
+                  style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.zoom})` }}>
+                
+                {/* Butterfly Bracket Layout */}
+                <div className="tournament-tree flex items-stretch justify-center p-10 gap-0">
+                    
+                    {/* Left Wing */}
+                    {renderWing(false)}
+
+                    {/* Center Final */}
+                    <div className="round-column justify-center mx-2 relative z-10" style={{minWidth:'100px'}}>
+                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 text-center w-32">
+                            <div className="font-black text-[10px] tracking-[0.2em] mb-1" style={{color:'var(--final-title-text)'}}>FINAL</div>
+                            <div className="h-px w-full" style={{background: 'linear-gradient(to right, transparent, var(--tournament-line), transparent)'}}></div>
+                        </div>
+                        
+                        <div className="w-24 h-16 border rounded-xl shadow-lg flex flex-col items-center justify-center gap-1"
+                             style={{
+                                 borderColor: 'var(--tournament-winner)', 
+                                 background: 'linear-gradient(to bottom, var(--card-bg), var(--tournament-winner-bg2))'
+                             }}>
+                            <Icons.Trophy size={20} style={{color:'var(--tournament-winner)'}}/>
+                            <span className="text-[10px] font-bold" style={{color:'var(--text-main)'}}>WINNER</span>
+                        </div>
+                    </div>
+
+                    {/* Right Wing */}
+                    {renderWing(true)}
+
+                </div>
+             </div>
+
+             {/* Zoom Controls */}
+             <div className="absolute bottom-6 right-6 flex flex-col gap-2 border rounded-lg p-1.5 shadow-xl z-50 backdrop-blur-sm"
+                  style={{background:'var(--control-pill-bg)', borderColor:'var(--control-pill-border)'}}>
+                 <button onClick={()=>setView(p=>({...p, zoom: Math.min(2.0, p.zoom+0.1)}))} className="p-1.5 rounded hover:bg-black/10" style={{color:'var(--accent)'}}><Icons.Plus size={16}/></button>
+                 <button onClick={()=>setView(p=>({...p, zoom: Math.max(0.2, p.zoom-0.1)}))} className="p-1.5 rounded hover:bg-black/10" style={{color:'var(--accent)'}}><span className="block w-4 h-0.5 bg-current my-2"></span></button>
+                 <div className="h-px my-0.5" style={{background:'var(--control-divider)'}}></div>
+                 <button onClick={()=>setView({zoom: 0.8, x:0, y:0})} className="p-1.5 rounded hover:bg-black/10" style={{color:'var(--text-muted)'}} title="화면 맞춤"><Icons.Refresh size={14}/></button>
+             </div>
+
+             {/* [UPDATE] Draggable Team Select Popover (Solid Background) */}
+             {popover && (
+               <div className="popover-container fixed z-[10000] border shadow-2xl rounded-lg w-72 flex flex-col animate-in fade-in zoom-in-95 duration-100"
+                   style={{ 
+                       top: popover.y, left: popover.x,
+                       background: 'var(--select-bg)', // Solid background
+                       borderColor: 'var(--card-border)',
+                       maxHeight: '400px',
+                       boxShadow: '0 20px 40px -5px rgba(0,0,0,0.5)' // Deeper shadow
+                   }}>
+                   
+                   <div className="sticky top-0 p-2 border-b flex justify-between items-center z-10 cursor-move"
+                        onMouseDown={startPopoverDrag}
+                        style={{background: 'var(--select-bg)', borderColor: 'var(--divider)'}}>
+                       <div className="flex items-center gap-2 pl-1">
+                           <Icons.List size={14} style={{color:'var(--text-muted)'}}/>
+                           <span className="text-xs font-bold" style={{color:'var(--text-main)'}}>팀 선택 (드래그 가능)</span>
+                       </div>
+                       <button onClick={()=>setPopover(null)}><Icons.X size={14} style={{color:'var(--text-muted)'}}/></button>
+                   </div>
+
+                   <div className="py-1 overflow-y-auto custom-scrollbar" style={{backgroundColor: 'var(--select-bg)'}}>
+                       {/* BYE Option */}
+                       <button 
+                           onClick={()=>{ assignTeam(popover.slotIdx, { id: `manual-bye-${popover.slotIdx}`, label: 'BYE', isBye: true, team: { id: `bye-${Math.random()}`, name: 'BYE', isBye: true } }); }}
+                           className={`w-full text-left px-4 py-2.5 text-sm border-b transition-colors flex justify-between items-center group`}
+                           style={{borderColor:'var(--table-cell-border)', color: 'var(--accent)'}}
+                       >
+                           <span className="font-bold">✨ BYE</span>
+                           <span className="text-[10px] opacity-0 group-hover:opacity-100">선택</span>
+                       </button>
+
+                       {currentQualifiers.map(q => {
+                         const isUsed = usedIds.includes(q.id) && currentSlots[popover.slotIdx]?.id !== q.id;
+                         return (
+                           <button key={q.id} 
+                             onClick={()=>{ assignTeam(popover.slotIdx, q); }}
+                             className={`w-full text-left px-4 py-2.5 text-sm border-b transition-colors flex justify-between items-center group`}
+                             style={{
+                                 borderColor: 'var(--table-cell-border)',
+                                 background: isUsed ? 'var(--warning-bg)' : 'transparent', 
+                                 color: isUsed ? 'var(--warning-text)' : 'var(--text-main)'
+                             }}
+                           >
+                             <span className={isUsed ? 'font-bold' : ''}>{q.label}</span>
+                             {isUsed 
+                                ? <span className="text-[10px] font-bold border rounded px-1.5 py-0.5" style={{borderColor:'currentColor'}}>교체</span>
+                                : <span className="text-[10px] opacity-0 group-hover:opacity-100" style={{color:'var(--accent)'}}>선택</span>
+                             }
+                           </button>
+                         );
+                       })}
+                       {currentQualifiers.length === 0 && <div className="p-6 text-center text-xs" style={{color:'var(--text-muted)'}}>배정 가능한 팀이 없습니다.</div>}
+                   </div>
+               </div>
+             )}
+          </div>
+
+          {/* Resize Handle */}
+          <div className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize z-50" 
+               style={{background: 'linear-gradient(135deg, transparent 50%, var(--resize-handle-accent) 50%)', opacity:0.8}}
+               onMouseDown={(e)=>startWinDrag('resize',e)}/>
+        </div>
+      </div>
+    );
+  };
+  
     function ThemeManagerModal({
       open,
       onClose,
@@ -1427,8 +2004,10 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
 	  }
 	};
 	
-      const [activeTab, setActiveTab] = useState('register');
-      const [isDarkMode, setIsDarkMode] = useState(true);
+      // --- [수정] 상태 초기화 시 getSavedState 사용하여 복원 ---
+      const [activeTab, setActiveTab] = useState(() => getSavedState('activeTab', 'register'));
+      const [isDarkMode, setIsDarkMode] = useState(true); // 테마는 별도 스토리지 사용하므로 유지
+      
       const [themeMenuOpen, setThemeMenuOpen] = useState(false);
       const [themeManagerOpen, setThemeManagerOpen] = useState(false);
       const [themeManagerTab, setThemeManagerTab] = useState('dark');
@@ -1436,7 +2015,10 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
 
       const [themeDefaults, setThemeDefaults] = useState(null);
       const [themeOverrides, setThemeOverrides] = useState(null);
-
+      
+      // [NEW] Setup Modal State
+      const [showSetupModal, setShowSetupModal] = useState(false);
+    
       // Apply overrides to live UI
       useEffect(() => {
         if (!themeOverrides) return;
@@ -1468,13 +2050,16 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
       //const [cardSizes, setCardSizes] = useState({});
       const [cardSizes, setCardSizes] = useState(() => getSavedState('cardSizes', {}));
       
-      const [zoom, setZoom] = useState(0.85);
-      const [pan, setPan] = useState({ x: 0, y: 0 });
+      // [수정] UI 상태들도 저장된 값 불러오기
+      const [zoom, setZoom] = useState(() => getSavedState('zoom', 0.85));
+      const [pan, setPan] = useState(() => getSavedState('pan', { x: 0, y: 0 }));
+      const [sortMode, setSortMode] = useState(() => getSavedState('sortMode', 'input'));
+      
       const [isDragging, setIsDragging] = useState(false);
       const dragStart = useRef({ x: 0, y: 0 });
       const [isAdminMode, setIsAdminMode] = useState(false);
       const [autoGenCount, setAutoGenCount] = useState(1);
-      const [sortMode, setSortMode] = useState('input');
+
       const [editingTeamId, setEditingTeamId] = useState(null);
       const [editTeamData, setEditTeamData] = useState(null);
       const [hoverState, setHoverState] = useState(null);
@@ -1519,25 +2104,22 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
       useEffect(() => { setThemeManagerTab(isDarkMode ? 'dark' : 'light'); }, [themeManagerOpen]);
       useEffect(() => { if (themeManagerOpen) setIsDarkMode(themeManagerTab === 'dark'); }, [themeManagerOpen, themeManagerTab]);
 
-	useEffect(() => {
-	  // 저장할 데이터 객체 생성
-	  const dataToSave = {
-	    teams,
-	    groups,
-	    tournamentData,
-	    isLeagueGenerated,
-	    cardSizes,
-	    config
-	  };
-	  
-	  // 로컬 스토리지에 JSON 문자열로 변환하여 저장
-	  localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify(dataToSave));
-	  
-	  // 디버깅용 로그 (개발 완료 후 삭제 가능)
-	  // console.log('Data auto-saved to local storage');
-	  
-	}, [teams, groups, tournamentData, isLeagueGenerated, cardSizes, config]);
-
+      useEffect(() => {
+        const dataToSave = {
+          teams,
+          groups,
+          tournamentData,
+          isLeagueGenerated,
+          cardSizes,
+          config,
+          // 추가된 항목들
+          activeTab,
+          sortMode,
+          zoom,
+          pan
+        };
+        localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify(dataToSave));
+      }, [teams, groups, tournamentData, isLeagueGenerated, cardSizes, config, activeTab, sortMode, zoom, pan]);
       const updateThemeValue = (varKey, nextValue) => {
         setThemeOverrides(prev => {
           if (!prev) return prev;
@@ -2243,51 +2825,104 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
         return rounds;
       };
 
-      // Tournament Generator (순위별 그룹화 및 셔플 추가)
-      const generateTournament = () => {
-        setTournamentData({ type: 'single', brackets: [] });
-        let brackets = [];
-
-        // 특정 순위(rIdx) 팀들을 수집하되, 같은 순위 내에서는 섞어줌 (공정성)
-        const gatherTeams = (rIdx) => {
-          let c = [];
-          groups.forEach(g => {
-            const s = [...g.teams].sort((a,b)=>(a.leagueStats.rank||99)-(b.leagueStats.rank||99));
-            if(s[rIdx]) {
-              c.push({...s[rIdx], sourceLabel: `${g.id + 1}조 ${rIdx + 1}위`});
-            }
-          });
-          // 같은 순위끼리는 랜덤 셔플 (예: 1조 1위가 무조건 1번 시드를 가져가지 않도록)
-          return c.sort(() => Math.random() - 0.5);
+        // [MODIFIED] Setup Modal 열기
+        const prepareTournamentSetup = () => {
+          // 기본 Validation
+          if (groups.length === 0) return alert("조별 예선 데이터가 없습니다.");
+          setShowSetupModal(true);
         };
+        
+		// [NEW] 모달에서 확정된 데이터로 토너먼트 생성
+	      const handleConfirmSetup = (setupResult) => {
+	        const brackets = [];
+	        
+	        // Helper: createBracket은 이제 단순히 팀 리스트만 받아서 대진표를 짭니다.
+	        // 이미 모달에서 순서(슬롯)가 정해져서 넘어오므로 셔플이나 시드 배정을 다시 할 필요가 없습니다.
+	        // 다만 기존 createBracket은 시드 로직이 포함되어 있으므로, 
+	        // 모달에서 정한 순서대로 대진표(Matches)를 만드는 단순화된 로직이 필요하거나,
+	        // createBracket에 "이미 정렬됨" 플래그를 주어야 합니다.
+	        // 여기서는 가장 단순하게: 모달에서 넘어온 teams 배열 순서대로 매칭을 시킵니다.
+	        
+	        const buildRoundsFromOrderedTeams = (orderedTeams) => {
+	           let round1 = [];
+	           // orderedTeams는 이미 4, 8, 16, 32 사이즈로 맞춰져 있고 BYE도 채워져 있음
+	           for(let i=0; i < orderedTeams.length/2; i++) {
+	             const tA = orderedTeams[i*2];
+	             const tB = orderedTeams[i*2+1];
+	             let w = null;
+	             if(tA.isBye && tB.isBye) w=tA;
+	             else if(tA.isBye) w=tB;
+	             else if(tB.isBye) w=tA;
+	             
+	             round1.push({
+	               id: `r0-${i}`,
+	               nextMatchId: `r1-${Math.floor(i/2)}`,
+	               teamA: tA, teamB: tB,
+	               winner: w, scoreA:'', scoreB:''
+	             });
+	           }
+	           
+	           const rounds = [round1];
+	           const power = Math.ceil(Math.log2(orderedTeams.length));
+	           
+	           while(rounds[rounds.length-1].length > 1) {
+	             const prev = rounds[rounds.length-1];
+	             const next = [];
+	             for(let i=0; i<prev.length/2; i++) {
+	               const mId = `r${rounds.length}-${i}`;
+	               prev[i*2].nextMatchId = mId; 
+	               prev[i*2+1].nextMatchId = mId;
+	               
+	               // 자동 진출(BYE vs BYE 등) 처리
+	               const mA = prev[i*2], mB = prev[i*2+1];
+	               // 이전 라운드 승자가 이미 결정되어 있다면(BYE 등) 미리 가져올 수도 있겠지만,
+	               // 여기서는 구조만 잡습니다.
+	               
+	               next.push({ 
+	                 id: mId, 
+	                 nextMatchId: (rounds.length+1 < power) ? `r${rounds.length+1}-${Math.floor(i/2)}` : null, 
+	                 teamA: null, teamB: null, winner: null, scoreA:'', scoreB:'' 
+	               });
+	             }
+	             rounds.push(next);
+	           }
+	           
+	           // 초기 BYE 승자 전파
+	           // round1에서 winner가 있는 경우 다음 라운드 match의 teamA/B에 할당해야 함
+	           for(let r=0; r<rounds.length-1; r++) {
+	              rounds[r].forEach((m, idx) => {
+	                 if(m.winner) {
+	                    const nextM = rounds[r+1].find(nm => nm.id === m.nextMatchId);
+	                    if(nextM) {
+	                       if(idx % 2 === 0) nextM.teamA = m.winner;
+	                       else nextM.teamB = m.winner;
+	                       
+	                       // 다음 라운드에서도 또 부전승일 경우 처리 (재귀적)
+	                       // 간단하게: teamA/teamB가 세팅될 때 둘 중 하나가 Bye이면 승자 처리 로직은
+	                       // 실제 렌더링이나 handleScore에서 처리되므로 여기서는 데이터 구조만 연결
+	                       if(nextM.teamA && nextM.teamA.isBye && nextM.teamB && !nextM.teamB.isBye) nextM.winner = nextM.teamB;
+	                       else if(nextM.teamB && nextM.teamB.isBye && nextM.teamA && !nextM.teamA.isBye) nextM.winner = nextM.teamA;
+	                       else if(nextM.teamA && nextM.teamA.isBye && nextM.teamB && nextM.teamB.isBye) nextM.winner = nextM.teamA;
+	                    }
+	                 }
+	              });
+	           }
+	           return rounds;
+	        };
 
-        if (config.tournamentMode === 'split') {
-          let u=[], l=[];
-          // 상위부: 1위 그룹, 2위 그룹... 순서대로 쌓음 (절대 순서는 유지)
-          for(let r=0; r<config.topN; r++) u.push(...gatherTeams(r));
-          // 하위부
-          for(let r=config.topN; r<Math.max(...groups.map(g=>g.teams.length)); r++) l.push(...gatherTeams(r));
-          
-          if(u.length>1) brackets.push({ title: '(상위부)', rounds: createBracket(u) });
-          if(l.length>1) brackets.push({ title: '(하위부)', rounds: createBracket(l) });
-          setTournamentData({ type: 'split', brackets });
-        } else {
-          let t = [];
-          const limit = config.tournamentMode==='all' ? Math.max(...groups.map(g=>g.teams.length)) : config.topN;
-          
-          // 1위 그룹 전체 -> 2위 그룹 전체 -> ... 순으로 배열 생성
-          // createBracket은 이 순서를 기반으로 시드를 배정하므로
-          // 1위 그룹이 가장 높은 시드(부전승 우선권)를 갖게 됨
-          for(let r=0; r<limit; r++) t.push(...gatherTeams(r));
-          
-          if(t.length>1) brackets.push({ title: '토너먼트', rounds: createBracket(t) });
-          setTournamentData({ type: 'single', brackets });
-        }
-
-        setActiveTab('tournament');
-        setZoom(0.85);
-        setPan({x:0, y:0});
-      };
+	        if (setupResult.upper) {
+	           brackets.push({ title: config.tournamentMode==='split'?'(상위부)':'토너먼트', rounds: buildRoundsFromOrderedTeams(setupResult.upper) });
+	        }
+	        if (setupResult.lower) {
+	           brackets.push({ title: '(하위부)', rounds: buildRoundsFromOrderedTeams(setupResult.lower) });
+	        }
+	        
+	        setTournamentData({ type: config.tournamentMode==='split'?'split':'single', brackets });
+	        setShowSetupModal(false);
+	        setActiveTab('tournament');
+	        setZoom(0.85);
+	        setPan({x:0, y:0});
+	      };
       
       const openSwapModal = (bracketIdx, roundIdx, matchIdx, side) => setSwapModalData({ bracketIdx, roundIdx, matchIdx, side });
 
@@ -2395,20 +3030,14 @@ const toggleJointWinner = (bIdx) => {
             app: 'Table Tennis League Manager',
             exportedAt: new Date().toISOString(),
             data: {
-              teams,
-              groups,
-              tournamentData,
-              config,
-              isLeagueGenerated,
-              cardSizes,
-              isDarkMode,
-              themeOverrides
+              teams, groups, tournamentData, config, isLeagueGenerated, cardSizes, isDarkMode, themeOverrides,
+              // 파일 저장시에도 UI 상태 포함
+              activeTab, sortMode, zoom, pan
             }
           };
-
+          // ... (이하 blob 생성 및 다운로드 코드는 기존과 동일) ...
           const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
           const url = URL.createObjectURL(blob);
-
           const a = document.createElement('a');
           a.href = url;
           a.download = fileName;
@@ -2416,11 +3045,10 @@ const toggleJointWinner = (bIdx) => {
           a.click();
           a.remove();
           URL.revokeObjectURL(url);
-
           toast('파일로 저장했습니다.');
         } catch (e) { toast('저장에 실패했습니다.'); }
       };
-
+      
       const loadDataFromFile = (file) => {
         try {
           const reader = new FileReader();
@@ -2436,9 +3064,14 @@ const toggleJointWinner = (bIdx) => {
               if (d.config) setConfig(d.config);
               if (typeof d.isLeagueGenerated === 'boolean') setIsLeagueGenerated(d.isLeagueGenerated);
               if (d.cardSizes) setCardSizes(d.cardSizes);
-
               if (typeof d.isDarkMode === 'boolean') setIsDarkMode(d.isDarkMode);
               if (d.themeOverrides) setThemeOverrides(d.themeOverrides);
+
+              // 추가된 항목 복원
+              if (d.activeTab) setActiveTab(d.activeTab);
+              if (d.sortMode) setSortMode(d.sortMode);
+              if (d.zoom !== undefined) setZoom(d.zoom);
+              if (d.pan) setPan(d.pan);
 
               toast('파일에서 데이터를 불러왔습니다.');
             } catch (e) { toast('파일 해석에 실패했습니다.'); }
@@ -2788,7 +3421,7 @@ const toggleJointWinner = (bIdx) => {
                           </Button>
                         )}
                         <Button variant="secondary" onClick={()=>handlePrint(null)} className="text-sm py-1"><Icons.Printer size={16}/> 전체 인쇄</Button>
-                        <Button onClick={generateTournament} className="text-sm py-1"><Icons.ChevronRight size={16}/> 토너먼트 생성</Button>
+                        <Button onClick={prepareTournamentSetup} className="text-sm py-1"><Icons.ChevronRight size={16}/> 토너먼트 생성</Button>
                       </div>
                     </div>
 
@@ -3279,7 +3912,16 @@ const toggleJointWinner = (bIdx) => {
               onImportFile={importThemeFile}
               onResetTheme={resetThemeToDefaults}
             />
-
+            
+            {/* [NEW] Tournament Setup Modal */}
+            <TournamentSetupModal 
+              isOpen={showSetupModal}
+              onClose={()=>setShowSetupModal(false)}
+              config={config}
+              groups={groups}
+              onConfirm={handleConfirmSetup}
+            />
+            
             <input
               ref={dataFileInputRef}
               type="file"
