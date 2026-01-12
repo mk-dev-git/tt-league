@@ -124,10 +124,10 @@
       /* Tournament (토너먼트) */
       --tournament-line: #ccc;
       --tournament-line-active: #555;
-      --tournament-winner: #e11d48;
+      --tournament-winner: #fbbf24;
       --tournament-winner-shadow: rgba(251, 191, 36, 0.4);
       --tournament-winner-glow: rgba(251, 191, 36, 0.2);
-      --tournament-winner-bg2: #fff0f2;
+      --tournament-winner-bg2: #451a03;
       --tournament-team-hover-bg: rgba(56, 189, 248, 0.10);
       --tournament-team-hover-text: #38bdf8;
       --tournament-card-hover-border: #38bdf8;
@@ -1540,11 +1540,9 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
       const lSize = calcSize(lowerQ.length);
       
       setBracketSize({ upper: uSize, lower: lSize });
-      setSlots(prev => {
-         if(prev.upper.length !== uSize || prev.lower.length !== lSize) {
-             return { upper: Array(uSize).fill(null), lower: Array(lSize).fill(null) };
-         }
-         return prev;
+      setSlots({ 
+          upper: Array(uSize).fill(null), 
+          lower: Array(lSize).fill(null) 
       });
       setActiveTab('upper');
       
@@ -3493,6 +3491,28 @@ const generateRandomTeams = () => {
         const prepareTournamentSetup = () => {
           // 기본 Validation
           if (groups.length === 0) return alert("조별 예선 데이터가 없습니다.");
+          
+        // 각 조를 순회하며 순위(rank)가 0이거나 없는 팀이 있는지 검사
+        for (const group of groups) {
+          const hasUnranked = group.teams.some(t => !t.leagueStats.rank || t.leagueStats.rank === 0);
+          if (hasUnranked) {
+            alert(`[${group.name}] 순위가 정해지지 않은 팀이 있습니다.\n각 조의 '순위 계산' 버튼을 눌러 순위를 확정해주세요.`);
+            return; // 셋팅창 열지 않고 종료
+          }
+        }
+        
+        // 각 조를 순회하며 같은 순위를 가진 팀이 있는지 검사
+        for (const group of groups) {
+          const ranks = group.teams.map(t => t.leagueStats.rank);
+          const uniqueRanks = new Set(ranks); // 중복 제거된 순위 집합
+          
+          // 원래 팀 수와 중복 제거된 순위 개수가 다르면 동순위가 있다는 뜻
+          if (ranks.length !== uniqueRanks.size) {
+            alert(`[${group.name}] 동순위(같은 등수) 팀이 존재합니다.\n규칙을 변경하거나 점수를 확인하여 동률을 해결해주세요.`);
+            return; // 셋팅창 열지 않고 종료
+          }
+        }
+        
           setShowSetupModal(true);
         };
         
@@ -3737,7 +3757,7 @@ const handleJointWin = (bIdx, rIdx, mIdx) => {
             data: {
               teams, groups, tournamentData, config, isLeagueGenerated, cardSizes, isDarkMode, themeOverrides,
               // 파일 저장시에도 UI 상태 포함
-              activeTab, sortMode, zoom, pan
+              activeTab, sortMode, viewStates
             }
           };
           // ... (이하 blob 생성 및 다운로드 코드는 기존과 동일) ...
