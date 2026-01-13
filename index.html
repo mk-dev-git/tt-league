@@ -383,7 +383,6 @@
     /* Card */
     .resizable-card {
       background: var(--card-bg);
-      backdrop-filter: blur(12px);
       border: 1px solid var(--card-border);
       border-radius: 1rem;
       display: flex;
@@ -562,7 +561,6 @@
         height: auto !important;
         border: 2px solid #000 !important;
         background: #fff !important;
-        backdrop-filter: none !important;
         box-shadow: none !important;
         margin: 0 !important;
         border-radius: 0 !important;
@@ -641,7 +639,6 @@
       border: 1px solid var(--table-border);
       background: var(--card-bg);
       color: var(--text-main);
-      backdrop-filter: blur(10px);
       box-shadow: 0 10px 24px -16px rgba(0,0,0,0.6);
       font-size: 12px;
       opacity: 0;
@@ -765,8 +762,9 @@
   transition: background-color 0.3s;
 }
 .connector.active {
-  background-color: var(--tournament-winner); /* 승리 경로 강조 */
-  box-shadow: 0 0 4px var(--tournament-winner);
+  background-color: var(--tournament-winner) !important; /* 색상은 유지 */
+  box-shadow: none !important;       /* [핵심] 번짐(그림자) 효과 제거 */
+  z-index: 5;                        /* [추가] 활성화된 선을 맨 위로 올려 끊김 없이 선명하게 표시 */
 }
 
 /* 팀 슬롯 카드 */
@@ -2655,20 +2653,24 @@ const ButterflyLayout = ({ bracket, bIdx, onWinMatch, onToggleJointWin }) => {
       useEffect(() => { setThemeManagerTab(isDarkMode ? 'dark' : 'light'); }, [themeManagerOpen]);
       useEffect(() => { if (themeManagerOpen) setIsDarkMode(themeManagerTab === 'dark'); }, [themeManagerOpen, themeManagerTab]);
 
-      useEffect(() => {
-        const dataToSave = {
-          teams,
-          groups,
-          tournamentData,
-          isLeagueGenerated,
-          cardSizes,
-          config,
-          // 추가된 항목들
-          activeTab,
-          sortMode
-        };
-        localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify(dataToSave));
-      }, [teams, groups, tournamentData, isLeagueGenerated, cardSizes, config, activeTab, sortMode, viewStates]);
+	useEffect(() => {
+	  const handler = setTimeout(() => {
+	    const dataToSave = {
+	      teams,
+	      groups,
+	      tournamentData,
+	      isLeagueGenerated,
+	      cardSizes,
+	      config,
+	      activeTab,
+	      sortMode
+	    };
+	    localStorage.setItem(DATA_STORAGE_KEY, JSON.stringify(dataToSave));
+	  }, 1000); // 1초 동안 추가 변경이 없으면 저장 (Debounce)
+
+	  return () => clearTimeout(handler);
+	}, [teams, groups, tournamentData, isLeagueGenerated, cardSizes, config, activeTab, sortMode, viewStates]);
+	
       const updateThemeValue = (varKey, nextValue) => {
         setThemeOverrides(prev => {
           if (!prev) return prev;
@@ -3641,6 +3643,20 @@ const generateRandomTeams = () => {
         toast('✅ 대진표가 정확하게 생성되었습니다.');
       };
       
+      // [추가] 토너먼트 대진 데이터 초기화 (리셋) 함수
+const clearTournamentData = () => {
+  if (confirm("⚠️ 본선 토너먼트 대진을 초기화하시겠습니까?\n\n대진표가 화면에서 사라집니다.")) {
+    // 토너먼트 데이터를 빈 상태로 초기화
+    setTournamentData({ type: 'single', brackets: [] });
+    // 화면 줌/위치도 초기값으로 복구
+    setViewStates({
+      0: { zoom: 0.85, pan: { x: 0, y: 0 } },
+      1: { zoom: 0.85, pan: { x: 0, y: 0 } }
+    });
+    toast("토너먼트 대진이 초기화되었습니다.");
+  }
+};
+
       const openSwapModal = (bracketIdx, roundIdx, matchIdx, side) => setSwapModalData({ bracketIdx, roundIdx, matchIdx, side });
 
       const executeSwap = (tBIdx, tRIdx, tMIdx, tSide) => {
@@ -3974,8 +3990,19 @@ const handleTournamentWin = (bIdx, rIdx, mIdx, winnerTeam) => {
              <button onClick={() => updateCurrentZoom(z => z + 0.1)} title="확대" className="h-7 w-7 flex items-center justify-center rounded border shadow-sm transition-all hover:brightness-95 active:scale-95" style={{ background: 'var(--card-bg)', borderColor: 'var(--table-border)', color: 'var(--accent)' }}><Icons.ZoomIn size={14}/></button>
              <button onClick={() => updateCurrentZoom(z => z - 0.1)} title="축소" className="h-7 w-7 flex items-center justify-center rounded border shadow-sm transition-all hover:brightness-95 active:scale-95" style={{ background: 'var(--card-bg)', borderColor: 'var(--table-border)', color: 'var(--text-main)' }}><Icons.ZoomOut size={14}/></button>
              <div className="w-px h-3 bg-slate-500/30 mx-1"></div>
-             <button onClick={() => { updateCurrentZoom(0.85); updateCurrentPan({x:0, y:0}); }} title="화면 초기화" className="h-7 w-7 flex items-center justify-center rounded border shadow-sm transition-all hover:brightness-95 active:scale-95" style={{ background: 'var(--card-bg)', borderColor: 'var(--table-border)', color: 'var(--text-muted)' }}><Icons.Refresh size={14}/></button>
+             <button onClick={() => { updateCurrentZoom(0.85); updateCurrentPan({x:0, y:0}); }} title="화면 맞춤" className="h-7 w-7 flex items-center justify-center rounded border shadow-sm transition-all hover:brightness-95 active:scale-95" style={{ background: 'var(--card-bg)', borderColor: 'var(--table-border)', color: 'var(--text-muted)' }}><Icons.Refresh size={14}/></button>
           </div>
+          {/* 리셋 버튼 */}
+          <div className="w-px h-6 bg-slate-500/30 mx-1"></div>
+          <button 
+            onClick={clearTournamentData} 
+            title="대진 초기화 (대진화면 전체 지우기)" 
+            className="h-7 px-2 flex items-center justify-center gap-1 rounded border shadow-sm transition-all hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-500 active:scale-95"
+            style={{ background: 'var(--card-bg)', borderColor: 'var(--table-border)', color: 'var(--text-muted)' }}
+          >
+            <Icons.Trash size={12}/>
+            <span className="text-xs font-bold">초기화</span>
+          </button>
        </div>
     )}
 
@@ -4247,7 +4274,7 @@ const handleTournamentWin = (bIdx, rIdx, mIdx, winnerTeam) => {
 						        <div className="flex items-center justify-center">
 						          <div className="flex items-center gap-1.5">
 						            {/* 순번 */}
-						            <span className="font-bold text-xs" style={{color:'var(--text-main)'}}>{ti+1}.</span>
+						            <span className="font-bold text-xs" style={{color:'var(--text-main)'}}>{ti+1} </span>
 						            
 						            {/* 팀원 수에 따른 표시 로직 (좌측과 동일) */}
 						            {t.members.length >= 3 ? (
@@ -4298,7 +4325,7 @@ const handleTournamentWin = (bIdx, rIdx, mIdx, winnerTeam) => {
 						        {/* 1. 팀명/순번 셀 (기존 동일) */}
 						        <td className={`member-cell font-semibold border-r ${getHeaderHighlight(g.id,r.id)}`} style={{borderColor:'var(--table-cell-border)'}}>
 						          <div className="flex items-center cursor-help" title={r.affiliation ? `소속: ${r.affiliation}` : undefined}>
-						            <span className="font-bold mr-2 text-xs" style={{color:'var(--text-main)'}}>{ri+1}.</span>
+						            <span className="font-bold mr-2 text-xs" style={{color:'var(--text-main)'}}>{ri+1} </span>
 						            {r.members.length >= 3 ? (
 						              <div className="font-bold text-sm whitespace-nowrap" style={{color:'var(--text-main)'}}>{getLeagueDisplayName(r)}</div>
 						            ) : (
