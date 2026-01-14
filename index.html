@@ -1502,6 +1502,7 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
     
     // Popover State (slotIdx, x, y)
     const [popover, setPopover] = useState(null); 
+    const [hoveredTeamId, setHoveredTeamId] = useState(null); // [추가] 리스트 호버 상태
 
     // --- 초기화 로직 ---
     useEffect(() => {
@@ -1620,6 +1621,13 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
 
     const startPan = (e) => {
         if (e.target.closest('button') || e.target.closest('.match-card') || e.target.closest('.popover-container')) return;
+        
+        if (popover) {
+        setPopover(null); // 리스트 닫기
+        setHoveredTeamId(null); // 호버 상태도 초기화 (안전장치)
+        return; // 드래그 모드로 진입하지 않고 종료
+        }
+    
         setIsPanning(true);
         panDragRef.current = { startX: e.clientX, startY: e.clientY, initX: view.x, initY: view.y };
         document.body.style.cursor = 'grabbing';
@@ -1636,8 +1644,12 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
     // --- 슬롯 조작 ---
     const handleSlotClick = (idx, e) => {
       e.stopPropagation();
-      const initialX = win.x + win.w / 2 - 150; 
-      const initialY = win.y + win.h / 2 - 200;
+      const popWidth = 180;
+      const popHeight = 300;
+      
+      const initialX = win.x + (win.w / 2) - (popWidth / 2); 
+      const initialY = win.y + (win.h / 2) - (popHeight / 2);
+      
       setPopover({ slotIdx: idx, x: initialX, y: initialY });
     };
 
@@ -1655,6 +1667,7 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
 
       setSlots(p => ({ ...p, [activeTab]: newSlots }));
       setPopover(null);
+      setHoveredTeamId(null);
     };
 
     const resetCurrent = () => {
@@ -1711,106 +1724,100 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
       onConfirm(result);
     };
 
-// [수정] 토너먼트 셋팅 노드 (2라운드 이상은 공간(Width) 최소화)
-    const SetupMatchNode = ({ roundIdx, matchIdx, isRight, totalRounds, slotIdxA, slotIdxB, currentSlots }) => {
-        // isLeaf: true면 1라운드(팀 선택 버튼), false면 2라운드 이상
-        const isLeaf = roundIdx === 0;
-        
-        // isLastRound: 결승전 직전 라운드인지 여부
-        const isLastRound = roundIdx === totalRounds - 2; 
-        
-        // isEven: 짝수(위쪽), 홀수(아래쪽) 판별하여 선 꺾이는 방향 결정
-        const isEven = matchIdx % 2 === 0;
-        
-        const slotA = isLeaf ? currentSlots[slotIdxA] : null;
-        const slotB = isLeaf ? currentSlots[slotIdxB] : null;
+// [수정] 토너먼트 셋팅 노드 (팀 이름 외곽 표시 기능 추가)
+// [수정] SetupMatchNode: 하이라이트 처리를 위해 activeSlotIdx, highlightTeamId props 추가
+const SetupMatchNode = ({ roundIdx, matchIdx, isRight, totalRounds, slotIdxA, slotIdxB, currentSlots, activeSlotIdx, highlightTeamId }) => {
+    const isLeaf = roundIdx === 0;
+    const isLastRound = roundIdx === totalRounds - 2; 
+    const isEven = matchIdx % 2 === 0;
+    
+    const slotA = isLeaf ? currentSlots[slotIdxA] : null;
+    const slotB = isLeaf ? currentSlots[slotIdxB] : null;
+    const LINE_LEN = '16px'; 
 
-        // 연결선 길이
-        const LINE_LEN = '16px'; 
-        
-        const getSlotTooltip = (slot) => {
-            if (!slot) return '미배정';
-            // 팀이 있고 BYE가 아니면 '팀명'을, 그 외에는 기존 라벨('1조 1위' 등)을 표시
-            if (slot.team && !slot.team.isBye) return slot.team.name;
-            return slot.label;
-        };
-        
+    const getSlotTooltip = (slot) => {
+        if (!slot) return '미배정';
+        if (slot.team && !slot.team.isBye) return slot.team.name;
+        return slot.label;
+    };
+
+    const renderTeamName = (slot) => {
+        if (!slot || !slot.team || slot.team.isBye) return null;
         return (
-            <div style={{ 
-                display: 'flex', 
-                flexDirection: 'column', 
-                justifyContent: 'center', 
-                position: 'relative', 
-                flex: 1, 
-                // [수정 핵심] 1라운드(버튼있음)는 카드 너비 유지, 2라운드부터는 선만 보이도록 너비 10px로 축소
-                width: isLeaf ? 'var(--dynamic-card-width)' : '10px', 
-                alignSelf: 'center',
-                minHeight: isLeaf ? '60px' : '20px' 
+            <span style={{
+                position: 'absolute', top: '50%', transform: 'translateY(-50%)',
+                [isRight ? 'left' : 'right']: '105%', whiteSpace: 'nowrap',
+                color: 'var(--text-muted)', fontSize: '11px', fontWeight: 'bold', pointerEvents: 'none',
+                textShadow: '0 1px 2px var(--bg-body)'
             }}>
-                
-                {/* =========================================================
-                   [1. 연결선 그리기 영역] (기존 유지)
-                   ========================================================= */}
-                {!isLastRound && (
-                    <>
-                        {/* 가로선 */}
-                        <div className="connector-line" style={{
-                            height: '1px',
-                            width: LINE_LEN,
-                            top: '50%',
-                            [isRight ? 'left' : 'right']: `-${LINE_LEN}`
-                        }} />
-                        
-                        {/* 세로선 */}
-                        <div className="connector-line" style={{
-                            width: '1px',
-                            top: isEven ? '50%' : 'auto',
-                            bottom: isEven ? 'auto' : '50%',
-                            height: 'calc(50% + 2px)', 
-                            [isRight ? 'left' : 'right']: `-${LINE_LEN}`
-                        }} />
-                    </>
-                )}
-                
-                {/* 마지막 라운드 중앙 연결선 */}
-                {isLastRound && (
-                    <div className="connector-line" style={{
-                        height: '1px',
-                        width: LINE_LEN,
-                        top: '50%',
-                        [isRight ? 'right' : 'left']: `-${LINE_LEN}`
-                    }} />
-                )}
-
-                {/* =========================================================
-                   [2. 매치 카드 내용 영역]
-                   ========================================================= */}
-                <div className="relative z-10 flex flex-col justify-center w-full" 
-                     style={{ margin: isLeaf ? '4px 0' : '0' }}>
-                    
-                    {isLeaf ? (
-                        // [Case A] 1라운드: 팀 배정 버튼 표시
-                        <div className="flex flex-col w-full">
-                            <button onClick={(e)=>handleSlotClick(slotIdxA, e)}
-                                className="setup-slot-btn hover:brightness-95"
-                                title={getSlotTooltip(slotA)}>
-                                {slotA ? slotA.label : (slotIdxA+1)}
-                            </button>
-                            <button onClick={(e)=>handleSlotClick(slotIdxB, e)}
-                                className="setup-slot-btn hover:brightness-95"
-                                title={getSlotTooltip(slotB)}>
-                                {slotB ? slotB.label : (slotIdxB+1)}
-                            </button>
-                        </div>
-                    ) : (
-                        // [Case B] 2라운드 이상: 내용 없음 (공간도 차지하지 않음)
-                        null
-                    )}
-                </div>
-            </div>
+                {slot.team.name}
+            </span>
         );
     };
-            
+
+    // [추가 로직] 하이라이트 여부 판별 함수
+    // 1. 현재 팝업이 열린 슬롯(activeSlotIdx)인가?
+    // 2. 리스트에서 마우스 올린 팀(highlightTeamId)이 배정된 슬롯인가?
+    const isHighlighted = (slotIdx, slot) => {
+        if (activeSlotIdx === slotIdx) return true; // 클릭된 칸
+        if (highlightTeamId && slot && slot.team && slot.team.id === highlightTeamId) return true; // 교체 대상
+        return false;
+    };
+
+    const highlightStyle = (isHigh) => isHigh ? {
+        background: 'var(--btn-secondary-bg-hover)',
+        color: 'var(--btn-secondary-text-hover)',
+        borderColor: 'var(--accent)'
+    } : {};
+    
+    return (
+        <div style={{ 
+            display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', 
+            flex: 1, width: isLeaf ? 'var(--dynamic-card-width)' : '10px', alignSelf: 'center', minHeight: isLeaf ? '60px' : '20px' 
+        }}>
+            {!isLastRound && (
+                <>
+                    <div className="connector-line" style={{ height: '1px', width: LINE_LEN, top: '50%', [isRight ? 'left' : 'right']: `-${LINE_LEN}` }} />
+                    <div className="connector-line" style={{ width: '1px', top: isEven ? '50%' : 'auto', bottom: isEven ? 'auto' : '50%', height: 'calc(50% + 2px)', [isRight ? 'left' : 'right']: `-${LINE_LEN}` }} />
+                </>
+            )}
+            {isLastRound && (
+                <div className="connector-line" style={{ height: '1px', width: LINE_LEN, top: '50%', [isRight ? 'right' : 'left']: `-${LINE_LEN}` }} />
+            )}
+
+            <div className="relative z-10 flex flex-col justify-center w-full" style={{ margin: isLeaf ? '4px 0' : '0' }}>
+                {isLeaf ? (
+                    <div className="flex flex-col w-full">
+                        {/* Team A Button */}
+                        <button onClick={(e)=>handleSlotClick(slotIdxA, e)}
+                            className="setup-slot-btn hover:brightness-95"
+                            style={{ 
+                                position: 'relative', overflow: 'visible',
+                                ...highlightStyle(isHighlighted(slotIdxA, slotA)) // [적용]
+                            }}
+                            title={getSlotTooltip(slotA)}>
+                            {slotA ? slotA.label : (slotIdxA+1)}
+                            {renderTeamName(slotA)}
+                        </button>
+
+                        {/* Team B Button */}
+                        <button onClick={(e)=>handleSlotClick(slotIdxB, e)}
+                            className="setup-slot-btn hover:brightness-95"
+                            style={{ 
+                                position: 'relative', overflow: 'visible',
+                                ...highlightStyle(isHighlighted(slotIdxB, slotB)) // [적용]
+                            }}
+                            title={getSlotTooltip(slotB)}>
+                            {slotB ? slotB.label : (slotIdxB+1)}
+                            {renderTeamName(slotB)}
+                        </button>
+                    </div>
+                ) : null}
+            </div>
+        </div>
+    );
+};
+
 const renderWing = (isRight) => {
         const size = bracketSize[activeTab];
         const halfSize = size / 2;
@@ -1843,6 +1850,8 @@ const renderWing = (isRight) => {
                                         slotIdxA={actualLeafBase}
                                         slotIdxB={actualLeafBase + 1}
                                         currentSlots={slots[activeTab]}
+                                        activeSlotIdx={popover?.slotIdx}
+                                        highlightTeamId={hoveredTeamId}
                                     />
                                 );
                             })}
@@ -1980,32 +1989,36 @@ const renderWing = (isRight) => {
                  <button onClick={()=>setView({zoom: 0.8, x:0, y:0})} className="p-1.5 rounded hover:bg-black/10" style={{color:'var(--text-muted)'}} title="화면 맞춤"><Icons.Refresh size={14}/></button>
              </div>
 
-             {/* [UPDATE] Draggable Team Select Popover (Solid Background) */}
+{/* [UPDATE] Draggable Team Select Popover (Solid Background) */}
              {popover && (
-               <div className="popover-container fixed z-[10000] border shadow-2xl rounded-lg w-52 flex flex-col animate-in fade-in zoom-in-95 duration-100"
+               <div className="popover-container fixed z-[10000] border shadow-2xl rounded-lg flex flex-col animate-in fade-in zoom-in-95 duration-100"
+                   // [수정] w-52 -> w-44로 사이즈 축소
                    style={{ 
                        top: popover.y, left: popover.x,
-                       background: 'var(--btn-secondary-bg)', // Solid background
+                       width: '176px', // w-44 equivalent
+                       background: 'var(--btn-secondary-bg)', 
                        borderColor: 'var(--btn-secondary-bg)',
-                       maxHeight: '400px',
-                       boxShadow: '0 20px 40px -5px rgba(0,0,0,0.5)' // Deeper shadow
+                       maxHeight: '350px', // 높이 제한 약간 축소
+                       boxShadow: '0 20px 40px -5px rgba(0,0,0,0.5)' 
                    }}>
                    
                    <div className="sticky top-0 p-2 border-b flex justify-between items-center z-10 cursor-move"
                         onMouseDown={startPopoverDrag}
                         style={{background: 'var(--select-bg)', borderColor: 'var(--divider)'}}>
                        <div className="flex items-center gap-2 pl-1">
-                           <Icons.List size={14} style={{color:'var(--text-muted)'}}/>
-                           <span className="text-xs font-bold" style={{color:'var(--text-main)'}}>팀 선택 (드래그 가능)</span>
+                           <Icons.List size={12} style={{color:'var(--text-muted)'}}/>
+                           <span className="text-[11px] font-bold" style={{color:'var(--text-main)'}}>팀 선택</span>
                        </div>
-                       <button onClick={()=>setPopover(null)}><Icons.X size={14} style={{color:'var(--text-muted)'}}/></button>
+                           <button onClick={()=>{ setPopover(null); setHoveredTeamId(null); }}>
+                           <Icons.X size={12} style={{color:'var(--text-muted)'}}/>
+                       </button>
                    </div>
 
                    <div className="py-1 overflow-y-auto custom-scrollbar" style={{backgroundColor: 'var(--select-bg)'}}>
                        {/* BYE Option */}
                        <button 
                            onClick={()=>{ assignTeam(popover.slotIdx, { id: `manual-bye-${popover.slotIdx}`, label: 'BYE', isBye: true, team: { id: `bye-${Math.random()}`, name: 'BYE', isBye: true } }); }}
-                           className={`w-full text-left px-4 py-2.5 text-sm border-b transition-colors flex justify-between items-center group`}
+                           className={`w-full text-left px-3 py-2 text-xs border-b transition-colors flex justify-between items-center group`}
                            style={{borderColor:'var(--table-cell-border)', color: 'var(--accent)'}}
                        >
                            <span className="font-bold">✨ BYE</span>
@@ -2017,23 +2030,27 @@ const renderWing = (isRight) => {
                          return (
                            <button key={q.id} 
                              onClick={()=>{ assignTeam(popover.slotIdx, q); }}
+                             onMouseEnter={() => setHoveredTeamId(q.team?.id)}
+                             onMouseLeave={() => setHoveredTeamId(null)}
+                             
                              title={q.team ? q.team.name : ''}
-                             className={`w-full text-left px-4 py-2.5 text-sm border-b transition-colors flex justify-between items-center group`}
+                             // [수정] 패딩과 폰트 사이즈를 조금 더 작게 조정
+                             className={`w-full text-left px-3 py-2 text-xs border-b transition-colors flex justify-between items-center group`}
                              style={{
                                  borderColor: 'var(--table-cell-border)',
                                  background: isUsed ? 'var(--btn-secondary-bg)' : 'transparent', 
                                  color: isUsed ? 'var(--text-muted)' : 'var(--text-main)'
                              }}
                            >
-                             <span className={isUsed ? 'font-bold' : ''}>{q.label}</span>
+                             <span className={`truncate ${isUsed ? 'font-bold' : ''}`}>{q.label}</span>
                              {isUsed 
-                                ? <span className="text-[10px] font-bold border rounded px-1.5 py-0.5" style={{borderColor:'currentColor'}}>교체</span>
-                                : <span className="text-[10px] opacity-0 group-hover:opacity-100" style={{color:'var(--accent)'}}>선택</span>
+                                ? <span className="text-[9px] font-bold border rounded px-1" style={{borderColor:'currentColor'}}>교체</span>
+                                : <span className="text-[9px] opacity-0 group-hover:opacity-100" style={{color:'var(--accent)'}}>선택</span>
                              }
                            </button>
                          );
                        })}
-                       {currentQualifiers.length === 0 && <div className="p-6 text-center text-xs" style={{color:'var(--text-muted)'}}>배정 가능한 팀이 없습니다.</div>}
+                       {currentQualifiers.length === 0 && <div className="p-4 text-center text-[10px]" style={{color:'var(--text-muted)'}}>팀 없음</div>}
                    </div>
                </div>
              )}
