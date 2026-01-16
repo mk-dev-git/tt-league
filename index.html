@@ -753,23 +753,27 @@
         color: #e2e8f0;
     }
     
-    /* [추가/수정] 토너먼트 V2 스타일 */
-.bracket-column {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-around;
-  padding: 0 20px; /* 라운드 간 간격 */
-  flex: 1;
-}
+    .bracket-column {
+      display: flex;
+      flex-direction: column;
+      /* justify-content: space-around;  <-- 기존: 여백 기반 분배 (제거) */
+      justify-content: center;        /* 변경: 중앙 정렬 */
+      padding: 0 20px;
+      flex: 1;
+      height: 100%;                   /* [추가] 부모 높이를 꽉 채움 */
+    }
 
-.match-node {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  margin: 10px 0; /* 카드 상하 간격 */
-}
+    .match-node {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      margin: 10px 0;  /*<-- 기존: 고정 마진 (제거) */
+      /* margin: 0;          /* 변경: 마진 제거 */
+      flex: 1;            /* [추가] 중요! 가용 높이를 N등분하여 정확한 슬롯 점유 */
+      width: 100%;        /* [추가] 가로폭 확보 */
+    }
 
 /* 연결선 (커넥터) */
 .connector {
@@ -806,10 +810,13 @@
 
 /* 상태별 스타일 */
 .team-slot.winner {
-  background-color: var(--tournament-winner-bg2);
-  color: var(--tournament-winner);
-  font-weight: bold;
-  border-color: var(--tournament-winner);
+      background-color: var(--tournament-winner-bg2);
+      color: var(--tournament-winner);
+      font-weight: bold;
+      border-color: var(--tournament-winner);
+}
+.team-slot:last-child.winner {
+  border-top-color: var(--table-border);
 }
 .team-slot.loser { opacity: 0.5; }
 .team-slot.bye { color: var(--text-muted); font-style: italic; cursor: default; }
@@ -2507,7 +2514,6 @@ const ButterflyLayout = ({ bracket, bIdx, onWinMatch, onToggleJointWin }) => {
   const finalRoundIdx = totalRounds - 1;
   const finalMatch = rounds[finalRoundIdx][0];
 
-  // ... (Left/Right Wing 로직은 그대로 유지) ...
   const leftWingColumns = [];
   const rightWingColumns = [];
   
@@ -2521,11 +2527,12 @@ const ButterflyLayout = ({ bracket, bIdx, onWinMatch, onToggleJointWin }) => {
   const GAP_SIZE = '-60px'; 
   const ELEVATION = '120px'; 
 
+  // [수정 포인트] 최상위 컨테이너에 h-full 적용 및 items-stretch 사용
   return (
-    <div className="flex items-center justify-center p-10 gap-0">
+    <div className="flex items-stretch justify-center p-10 gap-0 h-full w-full">
       
-      {/* Left Wing (그대로 유지) */}
-      <div className="flex flex-row items-center relative z-10">
+      {/* Left Wing: items-center -> items-stretch로 변경하여 높이 100% 사용 */}
+      <div className="flex flex-row items-stretch relative z-10">
         {leftWingColumns.map((colMatches, colIdx) => {
           const isLastWingRound = colIdx === leftWingColumns.length - 1;
           return (
@@ -2546,9 +2553,10 @@ const ButterflyLayout = ({ bracket, bIdx, onWinMatch, onToggleJointWin }) => {
         })}
       </div>
 
-      {/* ===== CENTER (FINAL) 수정 부분 ===== */}
-      <div className="flex flex-col items-center relative" style={{ margin: `0 ${GAP_SIZE}` }}>
-         <div className="relative z-20 scale-110" style={{ transform: `translateY(-${ELEVATION})` }}> 
+      {/* ===== CENTER (FINAL) 유지 (기존 코드와 동일) ===== */}
+      {/* 결승전은 독립적인 위치를 가지므로 items-stretch의 영향을 받지 않도록 flex-col/center 유지 */}
+      <div className="flex flex-col items-center justify-center relative" style={{ margin: `0 ${GAP_SIZE}`, pointerEvents: 'none' }}>
+         <div className="relative z-20 scale-110" style={{ transform: `translateY(-${ELEVATION})`, pointerEvents: 'auto' }}> 
              <MatchNode 
                match={finalMatch} 
                roundIdx={finalRoundIdx} 
@@ -2556,16 +2564,14 @@ const ButterflyLayout = ({ bracket, bIdx, onWinMatch, onToggleJointWin }) => {
                isLeft={false} 
                isFinal={true} 
                onWin={(m, w) => onWinMatch(bIdx, finalRoundIdx, 0, w)} 
-               /* [추가] 공동우승 핸들러 연결 */
                onJointWin={() => onToggleJointWin(bIdx, finalRoundIdx, 0)}
              />
          </div>
       </div>
 
-      {/* Right Wing (그대로 유지) */}
-      <div className="flex flex-row-reverse items-center relative z-10">
+      {/* Right Wing: items-center -> items-stretch로 변경 */}
+      <div className="flex flex-row-reverse items-stretch relative z-10">
         {rightWingColumns.map((colMatches, colIdx) => {
-            // ... (기존 코드 유지)
             const isLastWingRound = colIdx === rightWingColumns.length - 1;
             return (
               <div key={`R-col-${colIdx}`} className="bracket-column">
