@@ -408,6 +408,10 @@
 
     .team-row:hover { background-color: var(--table-row-hover-bg); }
     .team-row.editing { background-color: var(--table-row-editing-bg); }
+    
+    .team-row.group-odd { background-color: var(--highlight-active-bg); }
+    .team-row.group-odd:hover { background-color: var(--table-row-hover-bg); }
+    
     .rank-btn { background: var(--rank-btn-bg); color: var(--rank-btn-text); border: 1px solid var(--rank-btn-border); }
     .rank-btn:hover { background: var(--rank-btn-bg-hover); }
 
@@ -1037,16 +1041,16 @@
     // ----------------------------------------------------------
     const FIXED_MATCH_ORDER = {
       2: [[1,2]],
-      3: [[1,3], [2,3], [1,2]],
-      4: [[1,4], [2,3], [1,3], [2,4], [1,2], [3,4]],
-      5: [[1,5], [2,4], [1,3], [2,5], [3,4], [1,2], [3,5], [1,4], [2,3], [4,5]],
-      6: [[1,6], [2,5], [3,4], [1,5], [4,6], [2,3], [1,4], [3,5], [2,6], [1,3], [2,4], [5,6], [1,2], [3,6], [4,5]],
-      7: [[1,7], [2,6], [3,5], [1,4], [2,7], [3,6], [4,5], [1,2], [3,7], [4,6], [1,5], [2,3], [4,7], [5,6], [1,3], [2,4], [5,7], [1,6], [3,4], [2,5], [6,7]],
-      8: [[1,8], [2,7], [3,6], [4,5], [1,7], [6,8], [2,5], [3,4], [1,6], [5,7], [4,8], [2,3], [1,5], [4,6], [3,7], [2,8], [1,4], [3,5], [2,6], [7,8], [1,3], [2,4], [5,8], [6,7], [1,2], [3,8], [4,7], [5,6]],
-      9: [[1,9], [2,8], [3,7], [4,6], [1,5], [2,9], [3,8], [4,7], [5,6], [1,2], [3,9], [4,8], [5,7], [1,6], [2,3], [4,9], [5,8], [6,7], [1,3], [2,4], [5,9], [6,8], [1,7], [3,4], [2,5], [6,9], [7,8], [1,4], [3,5], [2,6], [7,9], [1,8], [4,5], [3,6], [2,7], [8,9]],
-      10: [[1,10], [2,9], [3,8], [4,7], [5,6], [1,9], [8,10], [2,7], [3,6], [4,5], [1,8], [7,9], [6,10], [2,5], [3,4], [1,7], [6,8], [5,9], [4,10], [2,3], [1,6], [5,7], [4,8], [3,9], [2,10], [1,5], [4,6], [3,7], [2,8], [9,10], [1,4], [3,5], [2,6], [7,10], [8,9], [1,3], [2,4], [5,10], [6,9], [7,8], [1,2], [3,10], [4,9], [5,8], [6,7]],
-      11: [[1,11], [2,10], [3,9], [4,8], [5,7], [1,6], [2,11], [3,10], [4,9], [5,8], [6,7], [1,2], [3,11], [4,10], [5,9], [6,8], [1,7], [2,3], [4,11], [5,10], [6,9], [7,8], [1,3], [2,4], [5,11], [6,10], [7,9], [1,8], [3,4], [2,5], [6,11], [7,10], [8,9], [1,4], [3,5], [2,6], [7,11], [8,10], [1,9], [4,5], [3,6], [2,7], [8,11], [9,10], [1,5], [4,6], [3,7], [2,8], [9,11], [1,10], [5,6], [4,7], [3,8], [2,9], [10,11]],
-      12: [[1,12], [2,11], [3,10], [4,9], [5,8], [6,7], [1,11], [10,12], [2,9], [3,8], [4,7], [5,6], [1,10], [9,11], [8,12], [2,7], [3,6], [4,5], [1,9], [8,10], [7,11], [6,12], [2,5], [3,4], [1,8], [7,9], [6,10], [5,11], [4,12], [2,3], [1,7], [6,8], [5,9], [4,10], [3,11], [2,12], [1,6], [5,7], [4,8], [3,9], [2,10], [11,12], [1,5], [4,6], [3,7], [2,8], [9,12], [10,11], [1,4], [3,5], [2,6], [7,12], [8,11], [9,10], [1,3], [2,4], [5,12], [6,11], [7,10], [8,9], [1,2], [3,12], [4,11], [5,10], [6,9], [7,8]]
+      3: [[2,3], [1,3], [1,2]],
+      4: [[1,4], [2,3], [1,3], [4,2], [1,2], [3,4]],
+      5: [[2,5], [3,4], [1,5], [2,3], [1,4], [5,3], [1,3], [4,2], [1,2], [4,5]],
+      6: [[1,6], [2,5], [3,4], [1,5], [6,4], [2,3], [1,4], [5,3], [6,2], [1,3], [4,2], [5,6], [1,2], [3,6], [4,5]],
+      7: [[2,7], [3,6], [4,5], [1,7], [2,5], [3,4], [1,6], [7,5], [2,3], [1,5], [6,4], [7,3], [1,4], [5,3], [6,2], [1,3], [4,2], [6,7], [1,2], [4,7], [5,6]],
+      8: [[1,8], [2,7], [3,6], [4,5], [1,7], [8,6], [2,5], [3,4], [1,6], [7,5], [8,4], [2,3], [1,5], [6,4], [7,3], [8,2], [1,4], [5,3], [6,2], [7,8], [1,3], [4,2], [5,8], [6,7], [1,2], [3,8], [4,7], [5,6]],
+      9: [[2,9], [3,8], [4,7], [5,6], [1,9], [2,7], [3,6], [4,5], [1,8], [9,7], [2,5], [3,4], [1,7], [8,6], [9,5], [2,3], [1,6], [7,5], [8,4], [9,3], [1,5], [6,4], [7,3], [8,2], [1,4], [5,3], [6,2], [8,9], [1,3], [4,2], [6,9], [7,8], [1,2], [4,9], [5,8], [6,7]],
+      10: [[1,10], [2,9], [3,8], [4,7], [5,6], [1,9], [10,8], [2,7], [3,6], [4,5], [1,8], [9,7], [10,6], [2,5], [3,4], [1,7], [8,6], [9,5], [10,4], [2,3], [1,6], [7,5], [8,4], [9,3], [10,2], [1,5], [6,4], [7,3], [8,2], [9,10], [1,4], [5,3], [6,2], [7,10], [8,9], [1,3], [4,2], [5,10], [6,9], [7,8], [1,2], [3,10], [4,9], [5,8], [6,7]],
+      11: [[2,11], [3,10], [4,9], [5,8], [6,7], [1,11], [2,9], [3,8], [4,7], [5,6], [1,10], [11,9], [2,7], [3,6], [4,5], [1,9], [10,8], [11,7], [2,5], [3,4], [1,8], [9,7], [10,6], [11,5], [2,3], [1,7], [8,6], [9,5], [10,4], [11,3], [1,6], [7,5], [8,4], [9,3], [10,2], [1,5], [6,4], [7,3], [8,2], [10,11], [1,4], [5,3], [6,2], [8,11], [9,10], [1,3], [4,2], [6,11], [7,10], [8,9], [1,2], [4,11], [5,10], [6,9], [7,8]],
+      12: [[1,12], [2,11], [3,10], [4,9], [5,8], [6,7], [1,11], [12,10], [2,9], [3,8], [4,7], [5,6], [1,10], [11,9], [12,8], [2,7], [3,6], [4,5], [1,9], [10,8], [11,7], [12,6], [2,5], [3,4], [1,8], [9,7], [10,6], [11,5], [12,4], [2,3], [1,7], [8,6], [9,5], [10,4], [11,3], [12,2], [1,6], [7,5], [8,4], [9,3], [10,2], [11,12], [1,5], [6,4], [7,3], [8,2], [9,12], [10,11], [1,4], [5,3], [6,2], [7,12], [8,11], [9,10], [1,3], [4,2], [5,12], [6,11], [7,10], [8,9], [1,2], [3,12], [4,11], [5,10], [6,9], [7,8]]
     };
 
     const NAMES = ['김철수', '이영희', '박민수', '김민준', '김서연', '김도윤', '김하은', '이준호', '이지아', '박지훈', '박수빈', '최예준', '최지우', '정현우', '정채원', '강태현', '강지민', '조승우', '조하린', '윤재현', '윤서아', '장우진', '장다은', '임시우', '임유나', '한성민', '한예린', '오지후', '오서현', '서도현', '서윤지', '신민재', '신가은', '권준서', '권나연', '황도경', '황소연', '안재훈', '안하율', '송현준', '송은채', '류지환', '류채린', '홍진우', '홍아윤', '고은우', '고지윤', '문태윤', '문서진', '양준혁', '양예원', '손민수', '손다현', '배성준', '배서영', '백지호', '백하린', '남궁민', '노현석', '노지은', '나유준', '나채은', '전준영', '전소민', '하준우', '하은서', '성민호', '성예지', '손우성', '손지안', '유태준', '유하늘', '라준혁', '라세윤', '심건우', '심채영', '변준희', '변서윤', '우지훈', '우하진', '주민규', '주예슬', '채민석', '채서린', '표진호', '표다인', '탁성현', '탁예나', '허준혁', '허지수', '진도현', '진예린', '공민재', '공서연', '신은호', '신다솔', '강민서', '강유진', '박현서', '박라희', '이채원', '최하윤'];
@@ -1505,19 +1509,42 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
     const [hoveredTeamId, setHoveredTeamId] = useState(null); // [추가] 리스트 호버 상태
 
     // --- 초기화 로직 ---
-    useEffect(() => {
+useEffect(() => {
       if (!isOpen) return;
       
       const upperQ = [], lowerQ = [];
+      // 전체 조 중에서 가장 팀이 많은 조의 팀 수(=최대 순위) 계산
       const maxRank = Math.max(...groups.map(g => g.teams.length));
 
+      // 특정 조의 N위 팀을 가져오는 헬퍼 함수
       const getTeamByRank = (gId, rank) => {
+        // rank는 1부터 시작하므로 인덱스는 rank-1
+        // teams는 이미 정렬되어 있다고 가정하지만 안전을 위해 다시 정렬
         const sorted = [...groups[gId].teams].sort((a,b)=>(a.leagueStats.rank||99)-(b.leagueStats.rank||99));
         return sorted[rank-1];
       };
 
+      // [수정 핵심] 순위별 스네이크 방식 배정 루프
       for (let r = 1; r <= maxRank; r++) {
-        groups.forEach(g => {
+        
+        // 1. 현재 순위(r)가 하위부인지 판단 (스플릿 모드일 때만)
+        let isLowerBracket = (config.tournamentMode === 'split' && r > config.topN);
+
+        // 2. 해당 부(Bracket) 내에서의 "상대적 순위" 계산
+        // - 상위부(또는 통합): r 그대로 사용 (1위 -> 1, 2위 -> 2...)
+        // - 하위부: (현재순위 - 커트라인) 사용 (예: topN이 3이면, 4위 -> 1, 5위 -> 2...)
+        let relativeRank = isLowerBracket ? (r - config.topN) : r;
+
+        // 3. 스네이크 방향 결정 (상대적 순위가 짝수면 역방향)
+        // 홀수(1,3,5): 정방향 (1조 -> N조)
+        // 짝수(2,4,6): 역방향 (N조 -> 1조)
+        const isReverse = (relativeRank % 2 === 0);
+
+        // 4. 순회할 조의 순서 결정
+        // 원본 groups 배열을 건드리지 않기 위해 복사([...groups]) 후 뒤집음
+        const targetGroups = isReverse ? [...groups].reverse() : groups;
+
+        targetGroups.forEach(g => {
           const team = getTeamByRank(g.id, r);
           if (team) {
             const item = { 
@@ -1525,11 +1552,16 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
               label: `${g.name} ${r}위`, 
               team: { ...team, sourceLabel: `${g.name} ${r}위` } 
             };
+
+            // 모드에 따라 상위/하위 큐에 분배
             if (config.tournamentMode === 'split') {
-              if (r <= config.topN) upperQ.push(item); else lowerQ.push(item);
+              if (r <= config.topN) upperQ.push(item); 
+              else lowerQ.push(item);
             } else if (config.tournamentMode === 'topN') {
+              // 상위부만 진행하는 모드
               if (r <= config.topN) upperQ.push(item);
             } else {
+              // 전체 통합 모드
               upperQ.push(item);
             }
           }
@@ -1538,6 +1570,7 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
 
       setQualifiers({ upper: upperQ, lower: lowerQ });
 
+      // --- 이하 브라켓 사이즈 계산 로직은 기존과 동일 ---
       const calcSize = (n) => {
         if (n <= 4) return 4;
         if (n <= 8) return 8;
@@ -1567,7 +1600,7 @@ const MatchBox = React.memo(({ match, idx, bracketIdx, roundIdx, isRight = false
       setView({ zoom: startZoom, x: 0, y: 0 });
 
     }, [isOpen, config, groups]);
-    
+        
     useEffect(() => {
       setPopover(null);
     }, [activeTab]);
@@ -4195,63 +4228,72 @@ const handleTournamentWin = (bIdx, rIdx, mIdx, winnerTeam) => {
                                 <th className="px-4 font-bold">소속</th>
                                 <th className="px-4 font-bold">구성원</th>
                                 <th className="px-4 text-center font-bold">합부수</th>
-                                {isLeagueGenerated && <th className="px-4 text-center font-bold" style={{color:'var(--accent)', background:'rgba(56,189,248,0.08)'}}>배정된 조</th>}
+                                {isLeagueGenerated && <th className="px-4 text-center font-bold">배정된 조</th>}
                                 <th className="px-4 text-right font-bold">관리</th>
                               </tr>
                             </thead>
-                            <tbody>
-                              {teams.length===0 ? (
-                                <tr><td colSpan="6" className="text-center py-8" style={{color:'var(--text-muted)'}}>등록된 팀이 없습니다.</td></tr>
-                              ) : displayedTeams.map((t,i)=>(
-                                <tr key={t.id} className={`team-row ${editingTeamId===t.id?'editing':''}`}>
-                                  <td className="px-4 py-2 text-center font-medium" style={{color:'var(--text-muted)'}}>{i+1}</td>
-                                  <td className="px-4 font-medium" style={{color:'var(--text-main)'}}>
-                                    {editingTeamId===t.id
-                                      ? <input className="p-1 w-full rounded" style={{background:'var(--input-bg)', border:`1px solid var(--table-border)`, color:'var(--text-main)'}} value={editTeamData.name} onChange={(e)=>handleEditChange('name',e.target.value)}/>
-                                      : t.name}
-                                  </td>
-                                  <td className="px-4 text-center">
-                                          {editingTeamId===t.id ? (
-                                             <input className="p-1 w-full rounded text-center" style={{background:'var(--input-bg)', border:`1px solid var(--table-border)`, color:'var(--text-main)'}} value={editTeamData.affiliation || ''} onChange={(e)=>handleEditChange('affiliation',e.target.value)}/>
-                                          ) : (
-                                             <span className="tag" style={{backgroundColor: t.affiliation ? 'var(--tag-bg)' : 'transparent', border: t.affiliation ? '1px solid var(--tag-border)' : 'none'}}>{t.affiliation || '-'}</span>
-                                          )}
-                                  </td>
-                                  <td className="px-4" style={{color:'var(--text-muted)'}}>
-                                    {editingTeamId===t.id
-                                      ? editTeamData.members.map((m,mi)=>(
-                                        <div key={mi} className="flex gap-1 mb-1">
-                                          <input className="w-16 p-1 rounded" style={{background:'var(--input-bg)', border:`1px solid var(--table-border)`, color:'var(--text-main)'}} value={m.name} onChange={(e)=>handleEditChange(null,e.target.value,mi,'name')}/>
-                                          <input className="w-10 p-1 rounded" style={{background:'var(--input-bg)', border:`1px solid var(--table-border)`, color:'var(--text-main)'}} value={m.level} onChange={(e)=>handleEditChange(null,e.target.value,mi,'level')}/>
-                                        </div>
-                                      ))
-                                      : t.members.map(m=>`${m.name}(${m.level})`).join(', ')}
-                                  </td>
-                                  <td className="px-4 text-center font-bold" style={{color:'var(--team-level-text)'}}>{t.totalLevel}</td>
-                                  {isLeagueGenerated && (
-                                    <td className="px-4 text-center">
-                                      <select className="rounded p-1 text-xs" value={t.groupId===null?'':t.groupId} onChange={(e)=>handleGroupChange(t.id,e.target.value)}>
-                                        <option value="" disabled>미배정</option>
-                                        {Array.from({length:config.groupCount},(_,k)=><option key={k} value={k}>{k+1}조</option>)}
-                                      </select>
-                                    </td>
-                                  )}
-                                  <td className="px-4 text-right">
-                                    {editingTeamId===t.id ? (
-                                      <div className="flex justify-end gap-1">
-                                        <button onClick={saveEditing} className="p-1 rounded border" style={{background:'rgba(20,83,45,0.35)', borderColor:'rgba(34,197,94,0.35)', color:'#86efac'}}><Icons.Check/></button>
-                                        <button onClick={cancelEditing} className="p-1 rounded border" style={{background:'var(--btn-secondary-bg)', borderColor:'var(--btn-secondary-border)', color:'var(--btn-secondary-text)'}}><Icons.X/></button>
-                                      </div>
-                                    ) : (
-                                      <div className="flex justify-end gap-1">
-                                        <button onClick={()=>startEditing(t)} className="p-1 rounded border" style={{background:'transparent', borderColor:'transparent', color:'var(--text-muted)'}} title="편집"><Icons.Edit/></button>
-                                        <button onClick={()=>removeTeam(t.id)} className="p-1 rounded border" style={{background:'transparent', borderColor:'transparent', color:'var(--text-muted)'}} title="삭제"><Icons.Trash/></button>
-                                      </div>
-                                    )}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
+					<tbody>
+					  {teams.length === 0 ? (
+					    <tr><td colSpan="6" className="text-center py-8" style={{color:'var(--text-muted)'}}>등록된 팀이 없습니다.</td></tr>
+					  ) : displayedTeams.map((t, i) => {
+					    
+					    const isOddGroupRow = sortMode === 'group' && t.groupId !== null && (t.groupId % 2 === 0);
+
+					    return (
+					      <tr key={t.id} 
+					          className={`team-row ${editingTeamId === t.id ? 'editing' : ''} ${isOddGroupRow ? 'group-odd' : ''}`}
+					      >
+					        {/* ... (이하 td 내용들은 기존과 동일) ... */}
+					        <td className="px-4 py-2 text-center font-medium" style={{color:'var(--text-muted)'}}>{i+1}</td>
+					        <td className="px-4 font-medium" style={{color:'var(--text-main)'}}>
+					          {editingTeamId === t.id
+					            ? <input className="p-1 w-full rounded" style={{background:'var(--input-bg)', border:`1px solid var(--table-border)`, color:'var(--text-main)'}} value={editTeamData.name} onChange={(e)=>handleEditChange('name',e.target.value)}/>
+					            : t.name}
+					        </td>
+					        {/* ... 나머지 td 태그들은 그대로 두세요 ... */}
+					        <td className="px-4 text-center">
+					            {editingTeamId===t.id ? (
+					               <input className="p-1 w-full rounded text-center" style={{background:'var(--input-bg)', border:`1px solid var(--table-border)`, color:'var(--text-main)'}} value={editTeamData.affiliation || ''} onChange={(e)=>handleEditChange('affiliation',e.target.value)}/>
+					            ) : (
+					               <span className="tag" style={{backgroundColor: t.affiliation ? 'var(--tag-bg)' : 'transparent', border: t.affiliation ? '1px solid var(--tag-border)' : 'none'}}>{t.affiliation || '-'}</span>
+					            )}
+					        </td>
+					        <td className="px-4" style={{color:'var(--text-muted)'}}>
+					          {editingTeamId===t.id
+					            ? editTeamData.members.map((m,mi)=>(
+					              <div key={mi} className="flex gap-1 mb-1">
+					                <input className="w-16 p-1 rounded" style={{background:'var(--input-bg)', border:`1px solid var(--table-border)`, color:'var(--text-main)'}} value={m.name} onChange={(e)=>handleEditChange(null,e.target.value,mi,'name')}/>
+					                <input className="w-10 p-1 rounded" style={{background:'var(--input-bg)', border:`1px solid var(--table-border)`, color:'var(--text-main)'}} value={m.level} onChange={(e)=>handleEditChange(null,e.target.value,mi,'level')}/>
+					              </div>
+					            ))
+					            : t.members.map(m=>`${m.name}(${m.level})`).join(', ')}
+					        </td>
+					        <td className="px-4 text-center font-bold" style={{color:'var(--text-main)'}}>{t.totalLevel}</td>
+					        {isLeagueGenerated && (
+					          <td className="px-4 text-center">
+					            <select className="rounded p-1 text-xs" value={t.groupId===null?'':t.groupId} onChange={(e)=>handleGroupChange(t.id,e.target.value)}>
+					              <option value="" disabled>미배정</option>
+					              {Array.from({length:config.groupCount},(_,k)=><option key={k} value={k}>{k+1}조</option>)}
+					            </select>
+					          </td>
+					        )}
+					        <td className="px-4 text-right">
+					          {editingTeamId===t.id ? (
+					            <div className="flex justify-end gap-1">
+					              <button onClick={saveEditing} className="p-1 rounded border" style={{background:'rgba(20,83,45,0.35)', borderColor:'rgba(34,197,94,0.35)', color:'#86efac'}}><Icons.Check/></button>
+					              <button onClick={cancelEditing} className="p-1 rounded border" style={{background:'var(--btn-secondary-bg)', borderColor:'var(--btn-secondary-border)', color:'var(--btn-secondary-text)'}}><Icons.X/></button>
+					            </div>
+					          ) : (
+					            <div className="flex justify-end gap-1">
+					              <button onClick={()=>startEditing(t)} className="p-1 rounded border" style={{background:'transparent', borderColor:'transparent', color:'var(--text-muted)'}} title="편집"><Icons.Edit/></button>
+					              <button onClick={()=>removeTeam(t.id)} className="p-1 rounded border" style={{background:'transparent', borderColor:'transparent', color:'var(--text-muted)'}} title="삭제"><Icons.Trash/></button>
+					            </div>
+					          )}
+					        </td>
+					      </tr>
+					    );
+					  })}
+					</tbody>
                           </table>
                         </div>
                       </div>
