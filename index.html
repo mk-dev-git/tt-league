@@ -3345,53 +3345,208 @@ const generateRandomTeams = () => {
         });
       };
 
-      // Sorting helper
-      const getSortedTeams = (teams, matrix, rankMethod) => {
-        return [...teams].sort((a, b) => {
-          const winDiff = (b.leagueStats.win - a.leagueStats.win);
-          const scoreDiff = ( (b.leagueStats.scoreWin - b.leagueStats.scoreLoss) - (a.leagueStats.scoreWin - a.leagueStats.scoreLoss) );
+      // =====================================================================================
+      // [수정] V2 고도화된 재귀 순위 결정 로직 (Recursive Ranking Logic)
+      // 요구사항: 3자 동률 시 특정 조건(전승/전패/득실우위 등)에 따라 팀을 확정하고 나머지 팀끼리 재계산
+      // =====================================================================================
 
-          const headToHead = () => {
-            const a_vs_b = matrix[`${a.id}_vs_${b.id}`];
-            const b_vs_a = matrix[`${b.id}_vs_${a.id}`];
-            if (a_vs_b !== undefined && b_vs_a !== undefined && a_vs_b !== '' && b_vs_a !== '') {
-              const avb = parseInt(a_vs_b, 10);
-              const bva = parseInt(b_vs_a, 10);
-              if (!isNaN(avb) && !isNaN(bva)) {
-                if (avb > bva) return -1;
-                if (bva > avb) return 1;
-              }
+      // 1. 특정 팀 그룹(subset) 간의 전적만 계산하는 헬퍼 함수
+      const calculateSubsetStats = (subsetTeams, fullMatrix) => {
+        const subsetIds = new Set(subsetTeams.map(t => t.id));
+        const statsMap = {}; // { teamId: { win, loss, scoreDiff } }
+
+        subsetTeams.forEach(t => {
+          let win = 0, loss = 0, scoreWin = 0, scoreLoss = 0;
+          
+          subsetTeams.forEach(opp => {
+            if (t.id === opp.id) return;
+            const myScore = fullMatrix[`${t.id}_vs_${opp.id}`];
+            const opScore = fullMatrix[`${opp.id}_vs_${t.id}`];
+
+            if (myScore !== undefined && opScore !== undefined && myScore !== '' && opScore !== '') {
+              const m = parseInt(myScore, 10) || 0;
+              const o = parseInt(opScore, 10) || 0;
+              scoreWin += m;
+              scoreLoss += o;
+              if (m > o) win++;
+              else if (m < o) loss++;
             }
-            return 0;
-          };
+          });
 
-          switch(rankMethod) {
-            case '1':
-              if (winDiff !== 0) return winDiff;
-              if (headToHead() !== 0) return headToHead();
-              return scoreDiff;
-            case '2':
-              if (winDiff !== 0) return winDiff;
-              if (scoreDiff !== 0) return scoreDiff;
-              return headToHead();
-            case '3':
-              if (scoreDiff !== 0) return scoreDiff;
-              if (headToHead() !== 0) return headToHead();
-              return winDiff;
-            case '4':
-              if (scoreDiff !== 0) return scoreDiff;
-              if (winDiff !== 0) return winDiff;
-              return headToHead();
-            default:
-              return winDiff;
-          }
+          statsMap[t.id] = {
+            winDiff: win - loss,       // 승패 (승 - 패)
+            scoreDiff: scoreWin - scoreLoss, // 득실 (득 - 실)
+            rawWin: win, // 내부 승수 (승자승 판단용)
+            rawLoss: loss // 내부 패수
+          };
         });
+        return statsMap;
       };
 
+      // 2. 재귀적으로 순위를 결정하는 함수
+      // depth: 무한루프 방지용 카운터
+      const solveRankRecursive = (teams, matrix, method, depth = 0) => {
+        // [안전장치] 팀이 1개 이하거나, 재귀가 너무 깊어지면(팀 수의 2배 초과) ID순 반환하여 종료
+        if (teams.length <= 1) return teams;
+        if (depth > teams.length * 2) {
+          console.warn("Ranking loop detected, falling back to ID sort");
+          return [...teams].sort((a,b) => a.id - b.id);
+        }
+
+        // A. 현재 subset끼리의 전적 계산 (리셋된 기준)
+        const stats = calculateSubsetStats(teams, matrix);
+        const getStat = (id) => stats[id];
+
+        // B. 기본 정렬 수행 (Primary -> Secondary 기준)
+        // method: '1'(승패->승자승->득실), '2'(승패->득실->승자승), '3'(득실->승자승->승패), '4'(득실->승패->승자승)
+        const sorted = [...teams].sort((a, b) => {
+          const sA = getStat(a.id);
+          const sB = getStat(b.id);
+
+          const compareWin = sB.winDiff - sA.winDiff;
+          const compareScore = sB.scoreDiff - sA.scoreDiff;
+
+          // 옵션별 1차 정렬 기준
+          if (method === '1' || method === '2') { // 승패 우선
+            if (compareWin !== 0) return compareWin;
+            if (method === '2' && compareScore !== 0) return compareScore; // 옵션2는 득실이 2순위
+          } else { // 득실 우선 ('3', '4')
+            if (compareScore !== 0) return compareScore;
+            if (method === '4' && compareWin !== 0) return compareWin; // 옵션4는 승패가 2순위
+          }
+          return 0; // 여기까지 같으면 동률 처리
+        });
+
+        // C. 동률 그룹(Tie Group) 감지 및 특수 로직 처리
+        const finalRanking = [];
+        let i = 0;
+        while (i < sorted.length) {
+          // 동률인 팀들을 묶음 (chunk)
+          const chunk = [sorted[i]];
+          let j = i + 1;
+          
+          while (j < sorted.length) {
+            const sA = getStat(sorted[i].id);
+            const sB = getStat(sorted[j].id);
+            
+            let isTied = false;
+            // 옵션별 동률 판단 기준
+            if (method === '2' || method === '4') {
+              // 승패와 득실이 "동시에" 같은 경우
+              isTied = (sA.winDiff === sB.winDiff) && (sA.scoreDiff === sB.scoreDiff);
+            } else if (method === '1') {
+              // 승패만 같고 승자승으로 넘어가야 하는 경우 (1차 기준 동률)
+              isTied = (sA.winDiff === sB.winDiff);
+            } else if (method === '3') {
+              // 득실만 같고 승자승으로 넘어가야 하는 경우 (1차 기준 동률)
+              isTied = (sA.scoreDiff === sB.scoreDiff);
+            }
+
+            if (isTied) chunk.push(sorted[j]);
+            else break;
+            j++;
+          }
+
+          // D. 동률 그룹 처리
+          if (chunk.length === 1) {
+            finalRanking.push(chunk[0]); // 동률 없음 -> 확정
+          } else if (chunk.length === 2) {
+             // 2명 동률: 승자승(Head-to-Head)으로 단순 해결
+             const cA = chunk[0], cB = chunk[1];
+             const scoreA = matrix[`${cA.id}_vs_${cB.id}`];
+             const scoreB = matrix[`${cB.id}_vs_${cA.id}`];
+             // 점수가 있고 A가 이겼으면 A가 앞, 아니면 B가 앞 (기존 순서 유지 or 스왑)
+             // *주의: 2명일 땐 재귀 불필요, 즉시 비교
+             if (parseInt(scoreA||0) < parseInt(scoreB||0)) {
+               finalRanking.push(cB, cA);
+             } else {
+               finalRanking.push(cA, cB);
+             }
+          } else {
+            // ★★★ 3명 이상 동률: 특수 조건(Recursive) 적용 ★★★
+            const chunkStats = calculateSubsetStats(chunk, matrix); // 동률팀 내부 전적
+            
+            let winner = null;
+            let loser = null;
+            let nextRest = [];
+
+            // Case 1: [옵션 2, 4] 승패/득실 모두 같음 -> "한 팀이 모두 이겼나?" / "한 팀이 모두 졌나?"
+            if (method === '2' || method === '4') {
+               const subsetSize = chunk.length;
+               
+               // 전승자 찾기
+               winner = chunk.find(t => chunkStats[t.id].rawWin === (subsetSize - 1));
+               // 전패자 찾기
+               loser = chunk.find(t => chunkStats[t.id].rawLoss === (subsetSize - 1));
+            }
+
+            // Case 2: [옵션 1] 승패 같음 -> 승자승 꼬임 -> "득실"로 결정
+            // Case 3: [옵션 3] 득실 같음 -> 승자승 꼬임 -> "승패"로 결정
+            // (이 경우 chunk는 이미 1차 정렬된 상태이므로, '엇갈림' 상태라면 2차 기준 최상위/최하위 추출 시도)
+            
+            if (!winner && !loser) {
+               // 꼬리 물기 상황 (승자승으로 판별 불가)
+               if (method === '1') {
+                 // 득실이 가장 많은 팀을 1위로 (sort by scoreDiff Desc)
+                 chunk.sort((a,b) => chunkStats[b.id].scoreDiff - chunkStats[a.id].scoreDiff);
+                 // 1위와 2위의 득실이 다르면 1위 확정
+                 if (chunkStats[chunk[0].id].scoreDiff !== chunkStats[chunk[1].id].scoreDiff) {
+                   winner = chunk[0];
+                 } else {
+                   // 1위 결정 불가 시 득실 가장 적은 팀 최하위 (sort Asc)
+                   // (이미 정렬됨. 마지막 요소 확인)
+                   const lastIdx = chunk.length - 1;
+                   if (chunkStats[chunk[lastIdx].id].scoreDiff !== chunkStats[chunk[lastIdx-1].id].scoreDiff) {
+                     loser = chunk[lastIdx];
+                   }
+                 }
+               } else if (method === '3') {
+                 // 승패가 가장 좋은 팀을 1위로 (sort by winDiff Desc)
+                 chunk.sort((a,b) => chunkStats[b.id].winDiff - chunkStats[a.id].winDiff);
+                 if (chunkStats[chunk[0].id].winDiff !== chunkStats[chunk[1].id].winDiff) {
+                   winner = chunk[0];
+                 } else {
+                   const lastIdx = chunk.length - 1;
+                   if (chunkStats[chunk[lastIdx].id].winDiff !== chunkStats[chunk[lastIdx-1].id].winDiff) {
+                     loser = chunk[lastIdx];
+                   }
+                 }
+               }
+            }
+
+            // 재귀 실행 (확정된 팀 제외하고 나머지끼리 다시 돌림)
+            if (winner) {
+               nextRest = chunk.filter(t => t.id !== winner.id);
+               finalRanking.push(winner); // 1위 확정
+               finalRanking.push(...solveRankRecursive(nextRest, matrix, method, depth + 1));
+            } else if (loser) {
+               nextRest = chunk.filter(t => t.id !== loser.id);
+               // 나머지를 먼저 순위 매기고
+               finalRanking.push(...solveRankRecursive(nextRest, matrix, method, depth + 1));
+               // 꼴찌를 마지막에 추가
+               finalRanking.push(loser);
+            } else {
+               // [Fallback] 루프에 빠지거나 조건으로도 나눌 수 없는 완전 동률일 경우
+               // 기존 로직(2차, 3차 정렬값)대로 그냥 순서대로 배치하거나 ID순 정렬
+               console.log("Unresolvable tie detected, preserving sort order.");
+               finalRanking.push(...chunk);
+            }
+          }
+
+          i = j; // 다음 청크로 이동
+        }
+
+        return finalRanking;
+      };
+
+      // 3. 메인 호출 함수 (기존 recalcAllGroupRanks 대체)
       const recalcAllGroupRanks = (rankMethod) => {
         setGroups(prev =>
           prev.map(g => {
-            const sorted = getSortedTeams(g.teams, g.matrix, rankMethod);
+            // [변경] 재귀 로직을 사용하여 정렬된 팀 리스트 획득
+            const sorted = solveRankRecursive(g.teams, g.matrix, rankMethod);
+            
+            // 순위 매핑 (1위부터 N위까지)
             const rankMap = {};
             sorted.forEach((t, i) => { rankMap[t.id] = i + 1; });
 
@@ -3399,7 +3554,10 @@ const generateRandomTeams = () => {
               ...g,
               teams: g.teams.map(t => ({
                 ...t,
-                leagueStats: { ...t.leagueStats, rank: rankMap[t.id] || 0 }
+                leagueStats: { 
+                  ...t.leagueStats, 
+                  rank: rankMap[t.id] || 0 
+                }
               }))
             };
           })
