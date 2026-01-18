@@ -12,6 +12,8 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
 
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
   <style>
     /* ==========================================================
@@ -1021,6 +1023,7 @@
       SortDesc: (p) => <Icon {...p} path={<><path d="M11 5h10"/><path d="M11 9h7"/><path d="M11 13h4"/><path d="M3 5l3-3 3 3"/><path d="M6 18V4"/></>} />,
       SortGroup: (p) => <Icon {...p} path={<><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></>} />,
       Printer: (p) => <Icon {...p} path={<><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></>} />,
+      Image: (p) => <Icon {...p} path={<><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></>} />,
       ZoomIn: (p) => <Icon {...p} path={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></>} />,
       ZoomOut: (p) => <Icon {...p} path={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></>} />,
       Refresh: (p) => <Icon {...p} path={<><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></>} />,
@@ -3018,7 +3021,7 @@ const ButterflyLayout = ({ bracket, bIdx, onWinMatch, onToggleJointWin }) => {
 	  setNewMembers(Array.from({ length: config.teamSize }, () => ({ name: '', level: '' })));
       };
 
-const generateRandomTeams = () => {
+      const generateRandomTeams = () => {
         const count = parseInt(autoGenCount) || 1;
         const teamSize = parseInt(config.teamSize) || 1;
         
@@ -3110,6 +3113,158 @@ const generateRandomTeams = () => {
           // [추가됨] 본선 토너먼트 데이터도 초기 상태로 리셋
           setTournamentData({ type: 'single', brackets: [] });
         } 
+      };
+      
+      // [추가] 조편성 모바일용 이미지 저장 함수
+      const exportGroupList = async () => {
+        if (!isLeagueGenerated || groups.length === 0) {
+          toast('생성된 조편성 결과가 없습니다.');
+          return;
+        }
+
+        toast('📸 이미지 저장을 시작합니다. 잠시만 기다려주세요...');
+
+        // 캡처용 컨테이너 생성 (화면 밖 배치)
+        const container = document.createElement('div');
+        Object.assign(container.style, {
+          position: 'fixed',
+          top: '-10000px',
+          left: '-10000px',
+          width: '900px', // [수정] 큰 글씨를 담기 위해 너비 약간 확대 (800 -> 900)
+          backgroundColor: '#fff',
+          fontFamily: 'Pretendard, -apple-system, sans-serif',
+          zIndex: '99999',
+          boxSizing: 'border-box'
+        });
+        document.body.appendChild(container);
+
+        try {
+          // 각 조를 순회하며 개별 이미지 생성
+          for (const g of groups) {
+            // 해당 조의 HTML 구성
+            container.innerHTML = `
+              <div style="padding: 20px; background: #fff;">
+                <div style="
+                  border: 4px solid #cbd5e1; 
+                  border-radius: 24px; 
+                  overflow: hidden; 
+                  background: #fff;
+                  box-shadow: none;
+                ">
+                  
+                  <div style="
+                    background: linear-gradient(90deg, #2563eb, #4f46e5); 
+                    padding: 24px; 
+                    font-weight: 900; 
+                    font-size: 48px; 
+                    color: #ffffff; 
+                    text-align: center;
+                    letter-spacing: -1px;
+                  ">
+                    ${g.name} <span style="font-size: 0.7em; opacity: 0.9; font-weight: 600;">(${g.teams.length}팀)</span>
+                  </div>
+
+                  <div style="
+                    display: flex; 
+                    align-items: center; 
+                    background: #f1f5f9; 
+                    border-bottom: 4px solid #e2e8f0; 
+                    font-size: 30px; 
+                    font-weight: 800; 
+                    color: #475569; 
+                    padding: 16px 0;
+                  ">
+                    <div style="flex: 1; padding-left: 20px; text-align: left;">팀 구성</div>
+                    <div style="width: 160px; text-align: center;">소속</div>
+                    <div style="width: 110px; text-align: center;">부수</div>
+                  </div>
+                  
+                  <div style="background: #ffffff; padding: 0 10px;">
+                    ${g.teams.map((t, i) => {
+                      // [수정] 팀원 이름 폰트 확대
+                      const memberStr = t.members.map(m => 
+                        `<span style="display:inline-block; margin-right:10px;">${m.name}<span style="color:#64748b; font-size:0.85em; margin-left:2px;">(${m.level})</span></span>`
+                      ).join(''); 
+                      
+                      const affiliation = t.affiliation || '-';
+
+                      return `
+                      <div style="
+                        display: flex; 
+                        align-items: center; 
+                        padding: 18px 0; 
+                        border-bottom: ${i === g.teams.length - 1 ? 'none' : '2px solid #e2e8f0'}; 
+                        line-height: 1.3;
+                      ">
+                        <div style="
+                          flex: 1; 
+                          padding-left: 20px; 
+                          text-align: left; 
+                          font-size: 42px;
+                          font-weight: 800; 
+                          color: #0f172a; 
+                          word-break: keep-all; 
+                          white-space: normal;
+                          letter-spacing: -1px;
+                        ">
+                          ${memberStr}
+                        </div>
+
+                        <div style="
+                          width: 160px; 
+                          text-align: center; 
+                          font-size: 34px; 
+                          color: #3b82f6; 
+                          font-weight: 800; 
+                          word-break: break-word;
+                          white-space: normal;
+                          letter-spacing: -0.5px;
+                        ">
+                          ${affiliation}
+                        </div>
+
+                        <div style="
+                          width: 110px; 
+                          text-align: center; 
+                          color: #475569; 
+                          font-weight: 900; 
+                          font-size: 36px;
+                        ">
+                          ${t.totalLevel}
+                        </div>
+                      </div>
+                    `}).join('')}
+                  </div>
+                </div>
+              </div>
+            `;
+
+            // 캡처 수행 (해상도 scale 유지)
+            const canvas = await html2canvas(container, { 
+              scale: 1.5, 
+              backgroundColor: '#ffffff', 
+              logging: false
+            });
+            
+            const link = document.createElement('a');
+            const dateStr = new Date().toLocaleDateString('ko-KR').replace(/\./g, '').replace(/ /g, '');
+            link.download = `${g.name}_${dateStr}.png`; 
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+
+            await new Promise(resolve => setTimeout(resolve, 300));
+          }
+
+          toast('✅ 모든 조의 이미지가 저장되었습니다.');
+          
+        } catch (err) {
+          console.error(err);
+          toast('이미지 저장 중 오류가 발생했습니다.');
+        } finally {
+          if(document.body.contains(container)) {
+            document.body.removeChild(container);
+          }
+        }
       };
       
       const startEditing = (team) => { setEditingTeamId(team.id); setEditTeamData(JSON.parse(JSON.stringify(team))); };
@@ -4251,9 +4406,9 @@ const handleTournamentWin = (bIdx, rIdx, mIdx, winnerTeam) => {
   {/* 상단 2행: 탭 메뉴 + 리그 툴바 (기존 코드 유지) */}
   <div className="w-full max-w-[98%] mx-auto px-4 py-1 flex flex-wrap items-center gap-y-2 border-t border-slate-700/30 lg:border-none">
     <div className="flex mr-4">
-      {renderTab('register','참가 등록',Icons.Users)}
-      {renderTab('league','예선 리그',Icons.List)}
-      {renderTab('tournament','본선 토너먼트',Icons.Trophy)}
+      {renderTab('register','등록',Icons.Users)}
+      {renderTab('league','리그',Icons.List)}
+      {renderTab('tournament','토너먼트',Icons.Trophy)}
     </div>
     
     {/* ... (이하 탭별 툴바 내용은 기존과 동일하므로 생략 가능) ... */}
@@ -4448,7 +4603,24 @@ const handleTournamentWin = (bIdx, rIdx, mIdx, winnerTeam) => {
 				        );
 				      })}
 				    </div>
-				    {/* [수정 끝] */}
+
+				    {/* [추가] 조편성 출력 버튼 (리그가 생성되었을 때만 표시) */}
+			        {isLeagueGenerated && isAdminMode && (
+			          <button 
+			            onClick={exportGroupList}
+			            className="flex items-center gap-1 px-3 py-1.5 text-xs rounded border transition-all hover:brightness-105 active:scale-95"
+			            style={{
+			              backgroundColor: 'var(--btn-primary-bg)', 
+			              color: 'var(--text-muted)',
+			              borderColor: 'transparent',
+			              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+			            }}
+			            title="조편성 결과를 이미지로 저장"
+			          >
+			            <Icons.Image size={12} /> {/* 만약 Icons.Image가 없다면 Icons.Printer 등을 사용 */}
+			            <span className="font-bold">조편성 이미지</span>
+			          </button>
+			        )}
 
 				    <Button onClick={clearAllTeams} variant="danger" className="text-xs px-3 py-1.5">
 				      <Icons.Trash size={12} className="mr-1"/> 초기화
@@ -4466,7 +4638,7 @@ const handleTournamentWin = (bIdx, rIdx, mIdx, winnerTeam) => {
                                 <th className="px-4 font-bold">소속</th>
                                 <th className="px-4 font-bold">구성원</th>
                                 <th className="px-4 text-center font-bold">합부수</th>
-                                {isLeagueGenerated && <th className="px-4 text-center font-bold">배정된 조</th>}
+                                {isLeagueGenerated && <th className="px-4 text-center font-bold">조</th>}
                                 <th className="px-4 text-right font-bold">관리</th>
                               </tr>
                             </thead>
